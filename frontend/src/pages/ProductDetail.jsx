@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useWishlist } from '../context/WishlistContext';
 import { ProductDetailSkeleton } from '../components/SkeletonLoader';
 import ProductCard from '../components/ProductCard';
 import {
@@ -24,6 +25,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ArrowRight,
+  Heart,
 } from 'lucide-react';
 
 const extractCategoryId = (prod) => {
@@ -43,6 +45,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { user } = useAuth();
+  const { isWishlisted, toggleWishlist } = useWishlist();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -496,6 +499,38 @@ const ProductDetail = () => {
                   >
                     <span>Buy Now</span>
                     <ArrowRight size={17} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlist(product._id || product.id, product)}
+                    title={isWishlisted(product._id || product.id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                    style={{
+                      height: '48px',
+                      minWidth: '48px',
+                      padding: '0 14px',
+                      borderRadius: '12px',
+                      border: isWishlisted(product._id || product.id)
+                        ? '1px solid rgba(239, 68, 68, 0.5)'
+                        : '1px solid var(--glass-border)',
+                      background: isWishlisted(product._id || product.id)
+                        ? 'rgba(239, 68, 68, 0.1)'
+                        : 'var(--bg-secondary)',
+                      color: isWishlisted(product._id || product.id) ? '#ef4444' : 'var(--text-primary)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      cursor: 'pointer',
+                      fontWeight: '700',
+                      fontSize: '13.5px',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <Heart
+                      size={18}
+                      fill={isWishlisted(product._id || product.id) ? '#ef4444' : 'none'}
+                    />
                   </button>
                 </div>
 

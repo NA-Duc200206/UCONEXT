@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { ProductListSkeleton } from '../components/SkeletonLoader';
 import {
   Search,
@@ -13,6 +14,7 @@ import {
   Star,
   ChevronRight,
   RotateCcw,
+  Heart,
 } from 'lucide-react';
 import {
   formatVND,
@@ -61,9 +63,12 @@ const getDisplayCategoryName = (rawName = '') => {
 const ShopProductCard = ({ product }) => {
   const { isDark } = useTheme();
   const { addToCart } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
   const timerRef = useRef(null);
+  const productId = product._id || product.id;
+  const wishlisted = isWishlisted(productId);
 
   useEffect(() => {
     return () => {
@@ -158,11 +163,43 @@ const ShopProductCard = ({ product }) => {
             -{discountPercent}%
           </span>
         )}
+        <button
+          type="button"
+          title={wishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleWishlist(productId, product);
+          }}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            border: wishlisted
+              ? '1px solid rgba(239, 68, 68, 0.45)'
+              : '1px solid var(--glass-border)',
+            background: isDark ? 'rgba(15, 23, 42, 0.78)' : 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(6px)',
+            color: wishlisted ? '#ef4444' : isDark ? '#e2e8f0' : '#334155',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            opacity: isHovered || wishlisted ? 1 : 0.85,
+            transition: 'all 0.2s ease',
+            zIndex: 3,
+          }}
+        >
+          <Heart size={15} fill={wishlisted ? '#ef4444' : 'none'} />
+        </button>
         {product.stock === 0 && (
           <span
             style={{
               position: 'absolute',
-              top: '8px',
+              bottom: '8px',
               right: '8px',
               background: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.94)',
               color: 'var(--text-secondary)',

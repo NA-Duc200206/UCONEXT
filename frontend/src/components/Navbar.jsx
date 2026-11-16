@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
+import { useWishlist } from '../context/WishlistContext';
 import { api } from '../services/api';
 import { 
   ShoppingBag, User, LogOut, LayoutDashboard, Sun, Moon, 
@@ -15,6 +16,7 @@ import {
   formatVND,
   translateCategoryName,
   getCategoryEditorialImage,
+  getSafeImageUrl,
   handleImageError,
 } from '../utils/formatters';
 
@@ -58,6 +60,7 @@ const Navbar = () => {
   const { user, logout, isAdmin } = useAuth();
   const { cart, getCartItemsCount, getCartTotal, removeFromCart } = useCart();
   const { isDark, toggleTheme } = useTheme();
+  const { wishlistProducts, wishlistCount, removeFromWishlist } = useWishlist();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -349,6 +352,113 @@ const Navbar = () => {
           )}
         </div>
       );
+    } else if (type === 'wishlist') {
+      content = (
+        <div style={{ width: '340px', padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-primary)', margin: 0 }}>
+              Wishlist ({wishlistCount})
+            </h3>
+          </div>
+          {!user ? (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+              <p style={{ margin: '0 0 12px' }}>Sign in to view your saved items.</p>
+              <Link
+                to="/login"
+                onClick={() => setActiveDropdown(null)}
+                style={{
+                  display: 'inline-block',
+                  padding: '8px 18px',
+                  background: '#2454F4',
+                  color: 'white',
+                  borderRadius: '8px',
+                  fontWeight: '700',
+                  fontSize: '12.5px',
+                  textDecoration: 'none'
+                }}
+              >
+                Sign In
+              </Link>
+            </div>
+          ) : wishlistProducts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+              Your wishlist is empty.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '280px', overflowY: 'auto' }}>
+              {wishlistProducts.map((item) => {
+                const pid = String(item._id || item.id);
+                return (
+                  <div key={pid} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <Link
+                      to={`/product/${pid}`}
+                      onClick={() => setActiveDropdown(null)}
+                      style={{ flexShrink: 0 }}
+                    >
+                      <img
+                        src={getSafeImageUrl(item.image)}
+                        alt={item.name}
+                        onError={handleImageError}
+                        style={{ width: '52px', height: '52px', borderRadius: '10px', objectFit: 'cover', display: 'block' }}
+                      />
+                    </Link>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Link
+                        to={`/product/${pid}`}
+                        onClick={() => setActiveDropdown(null)}
+                        style={{
+                          display: 'block',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: 'var(--text-primary)',
+                          margin: '0 0 2px 0',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          textDecoration: 'none'
+                        }}
+                      >
+                        {item.name}
+                      </Link>
+                      <div style={{ fontSize: '12px', color: '#2454F4', fontWeight: '700' }}>
+                        {formatVND(item.price)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeFromWishlist(pid)}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                      title="Remove from wishlist"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {user && (
+            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--glass-border)' }}>
+              <Link
+                to="/wishlist"
+                onClick={() => setActiveDropdown(null)}
+                style={{
+                  display: 'block',
+                  textAlign: 'center',
+                  padding: '11px',
+                  background: '#2454F4',
+                  color: 'white',
+                  borderRadius: '10px',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  textDecoration: 'none'
+                }}
+              >
+                View Full Wishlist
+              </Link>
+            </div>
+          )}
+        </div>
+      );
     } else if (type === 'user') {
       content = (
         <div style={{ width: '230px', padding: '10px' }}>
@@ -362,6 +472,9 @@ const Navbar = () => {
             </Link>
             <Link to="/orders" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: '8px', fontSize: '13px' }}>
               <PackageOpen size={15}/> My Orders
+            </Link>
+            <Link to="/wishlist" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: '8px', fontSize: '13px' }}>
+              <Heart size={15}/> My Wishlist
             </Link>
             {isAdmin && (
               <Link to="/admin" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: '#2454F4', textDecoration: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '13px' }}>
@@ -662,6 +775,58 @@ const Navbar = () => {
           >
             {isDark ? <Sun size={17} /> : <Moon size={17} />}
           </button>
+
+          {/* Wishlist Icon & Dropdown */}
+          <div style={{ position: 'relative' }} onMouseEnter={() => setActiveDropdown('wishlist')} onMouseLeave={() => setActiveDropdown(null)}>
+            <Link
+              to="/wishlist"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: 'transparent',
+                border: '1px solid transparent',
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textDecoration: 'none',
+                position: 'relative',
+                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
+              title="Wishlist"
+              onMouseEnter={e => {
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <Heart size={17} />
+              {wishlistCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '1px',
+                  right: '1px',
+                  background: '#ef4444',
+                  color: 'white',
+                  fontSize: '10px',
+                  fontWeight: '800',
+                  borderRadius: '50%',
+                  width: '15px',
+                  height: '15px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
+            {renderDropdown('wishlist')}
+          </div>
 
           {/* Cart Icon & Dropdown */}
           <div style={{ position: 'relative' }} onMouseEnter={() => setActiveDropdown('cart')} onMouseLeave={() => setActiveDropdown(null)}>
