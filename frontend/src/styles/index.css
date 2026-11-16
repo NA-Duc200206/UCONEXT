@@ -569,3 +569,36 @@ h1, h2, h3, h4, h5, h6 {
   transform: scale(1.25);
   text-shadow: 0 0 12px var(--color-accent) !important;
 }
+
+/* ============================================
+   Admin Portal Standardized Surfaces & Layout
+   ============================================ */
+.admin-page-container {
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 36px 48px 64px;
+}
+
+.admin-surface {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+}
+
+.admin-surface-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+}
+
+@media (max-width: 1024px) {
+  .admin-page-container {
+    padding: 28px 28px 56px;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-page-container {
+    padding: 20px 16px 48px;
+  }
+}
