@@ -96,6 +96,7 @@ export const api = {
     create: (orderData) => request('/orders', { method: 'POST', body: orderData }),
     getMyOrders: () => request('/orders/my-orders'),
     cancelOrder: (id) => request(`/orders/${id}/cancel`, { method: 'PUT' }),
+    requestRefund: (id, reason) => request(`/orders/${id}/refund-request`, { method: 'POST', body: { reason } }),
     getById: (id) => request(`/orders/${id}`),
     getAll: () => request('/orders'),
     updateStatus: (id, status, paymentStatus) => request(`/orders/${id}/status`, { method: 'PUT', body: { status, paymentStatus } }),
