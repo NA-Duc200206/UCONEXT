@@ -1,6 +1,7 @@
 import { Order, Product, Coupon } from '../models';
 import { emitEvent } from '../config/socket';
 import { emailService } from './emailService';
+import { couponService } from './couponService';
 
 export const orderService = {
   async createOrder(userId: string, data: { items: any[]; shippingAddress: any; paymentMethod?: string; couponCode?: string }) {
@@ -48,27 +49,14 @@ export const orderService = {
       });
     }
 
-    // Apply Coupon if supplied
+    // Apply Coupon if supplied (reuse couponService so validation & perUserLimit match 100%)
     let discountAmount = 0;
-    let appliedCoupon = null;
+    let appliedCoupon: string | undefined = undefined;
     if (couponCode) {
-      const coupon = await Coupon.findOne({ code: couponCode.trim().toUpperCase(), isDeleted: false });
-      const now = new Date();
-      if (coupon && now >= coupon.startDate && now <= coupon.endDate && coupon.usedCount < coupon.usageLimit && subtotal >= coupon.minOrderAmount) {
-        if (coupon.discountType === 'percentage') {
-          discountAmount = Math.round((subtotal * coupon.discountValue) / 100);
-          if (coupon.maxDiscountAmount && discountAmount > coupon.maxDiscountAmount) {
-            discountAmount = coupon.maxDiscountAmount;
-          }
-        } else {
-          discountAmount = coupon.discountValue;
-        }
-        if (discountAmount > subtotal) discountAmount = subtotal;
-
-        // Increase coupon usage
-        await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usedCount: 1 } });
-        appliedCoupon = coupon.code;
-      }
+      const validation = await couponService.validateCoupon(couponCode, subtotal, userId);
+      discountAmount = validation.discountAmount;
+      appliedCoupon = validation.code;
+      await Coupon.findByIdAndUpdate(validation.coupon.id, { $inc: { usedCount: 1 } });
     }
 
     const shippingFee = subtotal > 1000000 ? 0 : 30000;
@@ -86,6 +74,8 @@ export const orderService = {
       paymentStatus: 'pending',
       status: 'pending',
       items: orderItems as any,
+      couponCode: appliedCoupon,
+      discountAmount,
       totalAmount,
       statusHistory: [{ status: 'pending', timestamp: new Date(), note: `Order placed successfully.${appliedCoupon ? ` (Coupon: ${appliedCoupon})` : ''}` }]
     } as any);
@@ -192,9 +182,15 @@ export const orderService = {
         for (const item of order.items) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
         }
+        if (order.couponCode) {
+          await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
+        }
       } else if (previousStatus === 'cancelled' && status !== 'cancelled') {
         for (const item of order.items) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
+        }
+        if (order.couponCode) {
+          await Coupon.updateOne({ code: order.couponCode }, { $inc: { usedCount: 1 } });
         }
       }
     }
@@ -247,9 +243,12 @@ export const orderService = {
     order.status = 'cancelled';
     order.statusHistory.push({ status: 'cancelled', timestamp: new Date(), note: 'Order cancelled by customer.' });
 
-    // Restock
+    // Restock & restore coupon usage
     for (const item of order.items) {
       await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+    }
+    if (order.couponCode) {
+      await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
     }
 
     await order.save();

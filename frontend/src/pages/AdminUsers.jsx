@@ -14,6 +14,7 @@ const AdminUsers = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [pendingSelfRole, setPendingSelfRole] = useState(null);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -36,19 +37,23 @@ const AdminUsers = () => {
     }
   };
 
-  const handleRoleChange = async (userId, newRole) => {
-    if (userId === currentUser?.id || userId === currentUser?._id) {
-      if (!window.confirm('Warning: Changing your own role may revoke your administrative privileges. Proceed?')) {
-        return;
-      }
-    }
+  const executeRoleChange = async (userId, newRole) => {
     try {
       await api.auth.updateUserRole(userId, newRole);
       showToast('User role updated successfully!', 'success');
+      setPendingSelfRole(null);
       loadUsers();
     } catch (err) {
       showToast(err.message || 'Failed to update user role.', 'error');
     }
+  };
+
+  const handleRoleChange = async (userId, newRole) => {
+    if (userId === currentUser?.id || userId === currentUser?._id) {
+      setPendingSelfRole({ userId, newRole });
+      return;
+    }
+    await executeRoleChange(userId, newRole);
   };
 
   const filteredUsers = users.filter((u) => {
@@ -73,7 +78,7 @@ const AdminUsers = () => {
   };
 
   return (
-    <div style={{ padding: '40px 5%' }}>
+    <div className="admin-page-container">
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <Link 
@@ -93,7 +98,7 @@ const AdminUsers = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Users size={28} color="var(--color-primary)" /> Customer & Staff Management
+              <Users size={28} color="var(--brand)" /> Customer & Staff Management
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
               View registered users, assign roles, and inspect account activity ({users.length} total users).
@@ -103,7 +108,7 @@ const AdminUsers = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="glass-card" style={{ padding: '16px 24px', marginBottom: '24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="admin-surface" style={{ padding: '16px 24px', marginBottom: '24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1', minWidth: '260px' }}>
           <Search size={18} color="var(--text-muted)" />
           <input
@@ -153,15 +158,15 @@ const AdminUsers = () => {
           Loading user records...
         </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+        <div className="admin-surface" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
           <Users size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
           <p style={{ fontSize: '16px', fontWeight: '500' }}>No users match the search filter.</p>
         </div>
       ) : (
-        <div className="glass-card" style={{ overflowX: 'auto', padding: '0' }}>
+        <div className="admin-surface" style={{ overflowX: 'auto', padding: '0' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(255, 255, 255, 0.02)' }}>
+              <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--bg-elevated)' }}>
                 <th style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: '600' }}>User</th>
                 <th style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: '600' }}>Email</th>
                 <th style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: '600' }}>Role</th>
@@ -181,7 +186,7 @@ const AdminUsers = () => {
                           width: '36px',
                           height: '36px',
                           borderRadius: '50%',
-                          background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
+                          background: 'var(--brand)',
                           color: '#fff',
                           display: 'flex',
                           alignItems: 'center',
@@ -193,7 +198,7 @@ const AdminUsers = () => {
                         </div>
                         <div>
                           <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                            {u.name} {isSelf && <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: '700' }}>(You)</span>}
+                            {u.name} {isSelf && <span style={{ fontSize: '11px', color: 'var(--brand)', fontWeight: '700' }}>(You)</span>}
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>ID: {String(u.id || u._id).slice(-6)}</div>
                         </div>
@@ -219,25 +224,47 @@ const AdminUsers = () => {
                       {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <select
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.id || u._id, e.target.value)}
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          border: '1px solid var(--glass-border)',
-                          background: 'var(--input-bg)',
-                          color: 'var(--text-primary)',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          outline: 'none'
-                        }}
-                      >
-                        <option value="customer">Customer</option>
-                        <option value="admin">Admin</option>
-                        <option value="warehouse">Warehouse</option>
-                        <option value="support">Support</option>
-                      </select>
+                      {pendingSelfRole && (pendingSelfRole.userId === (u.id || u._id)) ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: '600' }}>
+                            Revoke admin to "{pendingSelfRole.newRole}"?
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => executeRoleChange(pendingSelfRole.userId, pendingSelfRole.newRole)}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPendingSelfRole(null)}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          value={u.role}
+                          onChange={(e) => handleRoleChange(u.id || u._id, e.target.value)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--glass-border)',
+                            background: 'var(--input-bg)',
+                            color: 'var(--text-primary)',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="customer">Customer</option>
+                          <option value="admin">Admin</option>
+                          <option value="warehouse">Warehouse</option>
+                          <option value="support">Support</option>
+                        </select>
+                      )}
                     </td>
                   </tr>
                 );

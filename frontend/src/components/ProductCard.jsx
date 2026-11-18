@@ -1,14 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { ShoppingCart, Star, Heart, Eye, Check } from 'lucide-react';
 import { formatVND, translateCategoryName, getSafeImageUrl, handleImageError } from '../utils/formatters';
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
   const timerRef = useRef(null);
+  const productId = product._id || product.id;
+  const wishlisted = isWishlisted(productId);
 
   useEffect(() => {
     return () => {
@@ -123,30 +127,57 @@ const ProductCard = ({ product }) => {
             display: 'flex',
             justifyContent: 'center',
             gap: '8px',
-            opacity: isHovered ? 1 : 0,
-            transform: isHovered ? 'translateY(0)' : 'translateY(10px)',
+            opacity: isHovered || wishlisted ? 1 : 0,
+            transform: isHovered || wishlisted ? 'translateY(0)' : 'translateY(10px)',
             transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             zIndex: 3
           }}>
-            {[
-              { icon: <Heart size={15} />, label: 'Wishlist' },
-              { icon: <Eye size={15} />, label: 'Quick View' }
-            ].map((action, i) => (
-              <button key={i} title={action.label} onClick={(e) => e.preventDefault()} style={{
+            <button
+              type="button"
+              title={wishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleWishlist(productId, product);
+              }}
+              style={{
+                width: '36px', height: '36px', borderRadius: '50%',
+                background: 'var(--glass-bg)', backdropFilter: 'blur(8px)',
+                border: wishlisted ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid var(--glass-border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: wishlisted ? '#ef4444' : 'var(--text-primary)', cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.borderColor = '#ef4444';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = wishlisted ? '#ef4444' : 'var(--text-primary)';
+                e.currentTarget.style.borderColor = wishlisted ? 'rgba(239, 68, 68, 0.5)' : 'var(--glass-border)';
+              }}
+            >
+              <Heart size={15} fill={wishlisted ? '#ef4444' : 'none'} />
+            </button>
+            <button
+              type="button"
+              title="Quick View"
+              onClick={(e) => e.preventDefault()}
+              style={{
                 width: '36px', height: '36px', borderRadius: '50%',
                 background: 'var(--glass-bg)', backdropFilter: 'blur(8px)',
                 border: '1px solid var(--glass-border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: isHovered ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
                 color: 'var(--text-primary)', cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}
               onMouseEnter={e => { e.currentTarget.style.color = '#2454F4'; e.currentTarget.style.borderColor = '#2454F4'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
-              >
-                {action.icon}
-              </button>
-            ))}
+            >
+              <Eye size={15} />
+            </button>
           </div>
         </div>
 

@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
+import { WishlistProvider } from './context/WishlistContext';
 
 // Layout Components
 import Navbar from './components/Navbar';
@@ -22,6 +23,7 @@ import PaymentResult from './pages/PaymentResult';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import MyOrders from './pages/MyOrders';
+import Wishlist from './pages/Wishlist';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminProducts from './pages/AdminProducts';
 import AdminOrders from './pages/AdminOrders';
@@ -75,8 +77,9 @@ const AppContent = () => {
             <Route path="/payment-result" element={<PaymentResult />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/orders" element={<RouteGuard><MyOrders /></RouteGuard>} />
-            <Route path="/settings" element={<RouteGuard><Settings /></RouteGuard>} />
+            <Route path="/orders" element={<MyOrders />} />
+            <Route path="/wishlist" element={<Wishlist />} />
+            <Route path="/settings" element={<Settings />} />
             
             {/* Admin Routes */}
             <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboard /></RouteGuard>} />
@@ -103,7 +106,9 @@ const App = () => {
         <AuthProvider>
           <CartProvider>
             <ToastProvider>
-              <AppContent />
+              <WishlistProvider>
+                <AppContent />
+              </WishlistProvider>
             </ToastProvider>
           </CartProvider>
         </AuthProvider>
