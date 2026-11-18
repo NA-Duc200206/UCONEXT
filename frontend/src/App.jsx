@@ -11,6 +11,7 @@ import { ToastProvider } from './context/ToastContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import AIFloatingChat from './components/AIFloatingChat';
+import RouteGuard from './components/RouteGuard';
 
 // Pages
 import Home from './pages/Home';
@@ -27,6 +28,7 @@ import AdminOrders from './pages/AdminOrders';
 import AdminUsers from './pages/AdminUsers';
 import AdminCoupons from './pages/AdminCoupons';
 import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 
 const AppContent = () => {
   const location = useLocation();
@@ -73,15 +75,17 @@ const AppContent = () => {
             <Route path="/payment-result" element={<PaymentResult />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/orders" element={<MyOrders />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/orders" element={<RouteGuard><MyOrders /></RouteGuard>} />
+            <Route path="/settings" element={<RouteGuard><Settings /></RouteGuard>} />
             
             {/* Admin Routes */}
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/products" element={<AdminProducts />} />
-            <Route path="/admin/orders" element={<AdminOrders />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/coupons" element={<AdminCoupons />} />
+            <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboard /></RouteGuard>} />
+            <Route path="/admin/products" element={<RouteGuard requireAdmin><AdminProducts /></RouteGuard>} />
+            <Route path="/admin/orders" element={<RouteGuard requireAdmin><AdminOrders /></RouteGuard>} />
+            <Route path="/admin/users" element={<RouteGuard requireAdmin><AdminUsers /></RouteGuard>} />
+            <Route path="/admin/coupons" element={<RouteGuard requireAdmin><AdminCoupons /></RouteGuard>} />
+
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
       </main>
