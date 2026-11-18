@@ -42,7 +42,13 @@ const Login = () => {
   const { isDark } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTarget = searchParams.get('redirect') || '/';
+  const rawRedirect = searchParams.get('redirect') || '/';
+  const redirectTarget =
+    rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : !rawRedirect.includes('://') && !rawRedirect.startsWith('//')
+        ? `/${rawRedirect}`
+        : '/';
 
   // Form State
   const [email, setEmail] = useState(() => localStorage.getItem('uconext_remember_email') || '');
@@ -97,7 +103,7 @@ const Login = () => {
       }
 
       if (user.role === 'admin') {
-        navigate('/admin');
+        navigate(redirectTarget !== '/' ? redirectTarget : '/admin');
       } else {
         navigate(redirectTarget);
       }
