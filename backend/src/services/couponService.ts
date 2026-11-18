@@ -47,7 +47,7 @@ export const couponService = {
     }
 
     if (orderAmount < coupon.minOrderAmount) {
-      const error: any = new Error(`Order minimum of ${coupon.minOrderAmount.toLocaleString('vi-VN')} ₫ required for this coupon.`);
+      const error: any = new Error(`Order minimum of ${coupon.minOrderAmount.toLocaleString('en-US')} VND required for this coupon.`);
       error.statusCode = 400;
       throw error;
     }
