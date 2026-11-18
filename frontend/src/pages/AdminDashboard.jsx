@@ -3,14 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { DashboardSkeleton } from '../components/SkeletonLoader';
+import { formatVND } from '../utils/formatters';
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { DollarSign, ShoppingCart, Users, Package, ArrowRight, Eye, LayoutDashboard, ShoppingBag } from 'lucide-react';
+import { DollarSign, ShoppingCart, Users, Package, ArrowRight, Eye, LayoutDashboard, ShoppingBag, Ticket } from 'lucide-react';
 
 const AdminDashboard = () => {
   const { user, isAdmin } = useAuth();
-  const { theme } = useTheme();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -47,15 +46,11 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px 5%' }}>
+      <div className="admin-page-container">
         <DashboardSkeleton />
       </div>
     );
   }
-
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', minimumFractionDigits: 0 }).format(value);
-  };
 
   const composedData = data.salesOverTime?.map(item => {
     const revenue = parseFloat(item.revenue);
@@ -69,11 +64,15 @@ const AdminDashboard = () => {
   }) || [];
 
   const statusData = [
-    { name: 'Pending', value: data.stats?.statusCounts?.pending || 0, color: 'var(--color-warning)' },
-    { name: 'Paid', value: data.stats?.statusCounts?.paid || 0, color: 'var(--color-success)' },
-    { name: 'Shipping', value: data.stats?.statusCounts?.shipping || 0, color: 'var(--color-accent)' },
-    { name: 'Completed', value: data.stats?.statusCounts?.completed || 0, color: 'var(--color-primary)' },
-    { name: 'Cancelled', value: data.stats?.statusCounts?.cancelled || 0, color: 'var(--color-error)' }
+    { name: 'Pending', value: data.stats?.statusCounts?.pending || 0, color: '#f59e0b' },
+    { name: 'Confirmed', value: data.stats?.statusCounts?.confirmed || 0, color: '#3b82f6' },
+    { name: 'Packaging', value: data.stats?.statusCounts?.packaging || 0, color: '#6366f1' },
+    { name: 'Shipping', value: data.stats?.statusCounts?.shipping || 0, color: '#0ea5e9' },
+    { name: 'Delivered', value: data.stats?.statusCounts?.delivered || 0, color: '#10b981' },
+    { name: 'Completed', value: data.stats?.statusCounts?.completed || 0, color: '#2454F4' },
+    { name: 'Cancelled', value: data.stats?.statusCounts?.cancelled || 0, color: '#ef4444' },
+    { name: 'Refund Req.', value: data.stats?.statusCounts?.refund_requested || 0, color: '#f97316' },
+    { name: 'Refunded', value: data.stats?.statusCounts?.refund_completed || 0, color: '#64748b' }
   ].filter(item => item.value > 0);
 
   const bestSellersData = data.bestSellers?.map(item => ({
@@ -90,23 +89,29 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <div style={{ padding: '40px 5%' }}>
+    <div className="admin-page-container">
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
           <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <LayoutDashboard size={32} color="var(--color-primary)" /> Admin Dashboard
+            <LayoutDashboard size={32} color="var(--brand)" /> Admin Dashboard
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Welcome admin, {user?.name}</p>
         </div>
 
         {/* Navigation Quick Links */}
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <Link to="/admin/products" className="btn btn-secondary">
-            <ShoppingBag size={16} /> Manage Products
+            <ShoppingBag size={16} /> Products
           </Link>
-          <Link to="/admin/orders" className="btn btn-accent">
-            <ShoppingCart size={16} /> Manage Orders
+          <Link to="/admin/orders" className="btn btn-primary" style={{ background: 'var(--brand)', color: '#ffffff' }}>
+            <ShoppingCart size={16} /> Orders
+          </Link>
+          <Link to="/admin/users" className="btn btn-secondary">
+            <Users size={16} /> Users
+          </Link>
+          <Link to="/admin/coupons" className="btn btn-secondary">
+            <Ticket size={16} /> Coupons
           </Link>
         </div>
       </div>
@@ -114,7 +119,7 @@ const AdminDashboard = () => {
       {/* Key Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '24px', marginBottom: '40px' }}>
         {statCards.map((card, idx) => (
-          <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px' }}>
+          <div key={idx} className="admin-surface" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px' }}>
             <div>
               <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>{card.title}</span>
               <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)' }}>{card.value}</span>
@@ -136,13 +141,13 @@ const AdminDashboard = () => {
       </div>
 
       {/* Main Sales Performance Chart */}
-      <div className="glass-card" style={{ padding: '24px', minHeight: '450px', display: 'flex', flexDirection: 'column', marginBottom: '30px' }}>
+      <div className="admin-surface" style={{ padding: '24px', minHeight: '450px', display: 'flex', flexDirection: 'column', marginBottom: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h3 style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '4px' }}>Sales & Transaction Analytics</h3>
+            <h3 style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '4px' }}>Sales and Transaction Analytics</h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Historical monthly overview of sales performance, volume, and Average Order Value (AOV)</p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', background: 'var(--input-bg)', padding: '4px', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+          <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-elevated)', padding: '4px', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
             {[
               { id: 'composed', label: 'Overview' },
               { id: 'revenue', label: 'Revenue' },
@@ -157,8 +162,8 @@ const AdminDashboard = () => {
                   fontWeight: '600',
                   borderRadius: '6px',
                   border: 'none',
-                  background: activeMainChart === type.id ? 'var(--color-primary)' : 'transparent',
-                  color: activeMainChart === type.id ? (theme === 'light' ? '#ffffff' : '#0f172a') : 'var(--text-secondary)',
+                  background: activeMainChart === type.id ? 'var(--brand)' : 'transparent',
+                  color: activeMainChart === type.id ? '#ffffff' : 'var(--text-secondary)',
                   cursor: 'pointer',
                   transition: 'var(--transition-fast)'
                 }}
@@ -241,7 +246,7 @@ const AdminDashboard = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px', marginBottom: '40px' }}>
         
         {/* Order Status Distribution (Donut Chart) */}
-        <div className="glass-card" style={{ padding: '24px', height: '400px', display: 'flex', flexDirection: 'column' }}>
+        <div className="admin-surface" style={{ padding: '24px', height: '400px', display: 'flex', flexDirection: 'column' }}>
           <div>
             <h3 style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '4px' }}>Order Status Share</h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Distribution of transaction states across the store</p>
@@ -287,7 +292,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Best Sellers (Bar Chart) */}
-        <div className="glass-card" style={{ padding: '24px', height: '400px', display: 'flex', flexDirection: 'column' }}>
+        <div className="admin-surface" style={{ padding: '24px', height: '400px', display: 'flex', flexDirection: 'column' }}>
           <div>
             <h3 style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '4px' }}>Top Selling Products</h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Revenue performance comparison of top 5 best sellers</p>
@@ -320,10 +325,10 @@ const AdminDashboard = () => {
       </div>
 
       {/* Recent Orders List */}
-      <div className="glass-card" style={{ padding: '24px' }}>
+      <div className="admin-surface" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>Recent Orders</h3>
-          <Link to="/admin/orders" style={{ display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: 'var(--color-primary)', fontSize: '13px', fontWeight: '600' }}>
+          <Link to="/admin/orders" style={{ display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: 'var(--brand)', fontSize: '13px', fontWeight: '600' }}>
             View All <ArrowRight size={14} />
           </Link>
         </div>
@@ -331,7 +336,7 @@ const AdminDashboard = () => {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px', textAlign: 'left' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
+              <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
                 <th style={{ padding: '12px 8px' }}>Order ID</th>
                 <th style={{ padding: '12px 8px' }}>Customer</th>
                 <th style={{ padding: '12px 8px' }}>Total</th>
@@ -342,8 +347,8 @@ const AdminDashboard = () => {
             </thead>
             <tbody>
               {data.recentOrders?.map(order => (
-                <tr key={order.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', color: 'var(--text-primary)' }}>
-                  <td style={{ padding: '16px 8px', fontWeight: '700' }}>#{order.id}</td>
+                <tr key={order.id} style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                  <td style={{ padding: '16px 8px', fontWeight: '700' }}>#{String(order.id || order._id).slice(-6)}</td>
                   <td style={{ padding: '16px 8px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span>{order.user?.name}</span>
@@ -357,11 +362,14 @@ const AdminDashboard = () => {
                     </span>
                   </td>
                   <td style={{ padding: '16px 8px' }}>
-                    {order.status === 'pending' && <span className="badge badge-warning">Pending</span>}
-                    {order.status === 'paid' && <span className="badge badge-success">Paid</span>}
-                    {order.status === 'shipping' && <span className="badge badge-primary">Shipping</span>}
-                    {order.status === 'completed' && <span className="badge badge-success">Completed</span>}
-                    {order.status === 'cancelled' && <span className="badge badge-error">Cancelled</span>}
+                    <span className={`badge ${
+                      order.status === 'pending' || order.status === 'refund_requested' ? 'badge-warning' :
+                      order.status === 'delivered' || order.status === 'completed' ? 'badge-success' :
+                      order.status === 'cancelled' || order.status === 'refund_completed' ? 'badge-error' :
+                      'badge-primary'
+                    }`}>
+                      {order.status?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </span>
                   </td>
                   <td style={{ padding: '16px 8px', textAlign: 'right' }}>
                     <Link to="/admin/orders" className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }} title="View Details">

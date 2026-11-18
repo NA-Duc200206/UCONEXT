@@ -6,10 +6,12 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
+import { WishlistProvider } from './context/WishlistContext';
 
 // Layout Components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import AIFloatingChat from './components/AIFloatingChat';
 
 // Pages
 import Home from './pages/Home';
@@ -20,9 +22,12 @@ import PaymentResult from './pages/PaymentResult';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import MyOrders from './pages/MyOrders';
+import Wishlist from './pages/Wishlist';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminProducts from './pages/AdminProducts';
 import AdminOrders from './pages/AdminOrders';
+import AdminUsers from './pages/AdminUsers';
+import AdminCoupons from './pages/AdminCoupons';
 import Settings from './pages/Settings';
 
 const AppContent = () => {
@@ -44,28 +49,21 @@ const AppContent = () => {
       {/* Dynamic Page Transition Animation Injection */}
       <style>{`
         .page-transition-container {
-          animation: pageSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          will-change: transform, opacity, filter;
+          animation: pageSlideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
         }
         @keyframes pageSlideUp {
           from {
             opacity: 0;
-            transform: translateY(16px);
-            filter: blur(4px);
+            transform: translateY(12px);
           }
           to {
             opacity: 1;
-            transform: translateY(0);
-            filter: blur(0);
+            transform: none;
           }
         }
       `}</style>
 
-      {/* Background ambient glow spheres */}
-      <div className="glow-sphere glow-sphere-1"></div>
-      <div className="glow-sphere glow-sphere-2"></div>
-      <div className="glow-sphere glow-sphere-3"></div>
-      {!isAuthPage && !isHomePage && <Navbar />}
+      {!isAuthPage && <Navbar />}
       
       <main style={{ flex: 1, position: 'relative', zIndex: 1 }}>
         <div key={location.pathname} className="page-transition-container">
@@ -78,17 +76,21 @@ const AppContent = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/orders" element={<MyOrders />} />
+            <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/settings" element={<Settings />} />
             
             {/* Admin Routes */}
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/products" element={<AdminProducts />} />
             <Route path="/admin/orders" element={<AdminOrders />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/coupons" element={<AdminCoupons />} />
           </Routes>
         </div>
       </main>
 
       {!isAdminPage && !isAuthPage && <Footer />}
+      {!isAdminPage && !isAuthPage && <AIFloatingChat />}
     </div>
   );
 };
@@ -100,7 +102,9 @@ const App = () => {
         <AuthProvider>
           <CartProvider>
             <ToastProvider>
-              <AppContent />
+              <WishlistProvider>
+                <AppContent />
+              </WishlistProvider>
             </ToastProvider>
           </CartProvider>
         </AuthProvider>

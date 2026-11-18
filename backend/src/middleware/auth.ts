@@ -48,3 +48,20 @@ export const isCustomer = (req: AuthenticatedRequest, res: Response, next: NextF
     return res.status(403).json({ message: 'Access denied.' });
   }
 };
+
+export const optionalAuthenticateToken = async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return next();
+
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026');
+    if (decoded?.id) {
+      const user = await User.findById(decoded.id);
+      if (user) req.user = user;
+    }
+  } catch {
+    // Ignore invalid/expired token for optional auth endpoints
+  }
+  return next();
+};

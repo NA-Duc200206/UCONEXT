@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Eye, DollarSign, ShoppingBag, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
 
 const AdminProducts = () => {
   const { isAdmin } = useAuth();
@@ -32,6 +33,7 @@ const AdminProducts = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
   const [editingId, setEditingId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -44,6 +46,24 @@ const AdminProducts = () => {
     colorsInput: '',
     sizesInput: ''
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      showToast('Uploading image...', 'info');
+      const res = await api.media.upload(file);
+      setFormData(prev => ({ ...prev, image: res.imageUrl }));
+      showToast('Image uploaded successfully!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Image upload failed.', 'error');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAdmin) {
@@ -110,11 +130,12 @@ const AdminProducts = () => {
 
   const openAddModal = () => {
     setModalMode('add');
+    const firstCatId = categories.length > 0 ? String(categories[0].id || categories[0]._id) : '';
     setFormData({
       name: '',
       price: '',
       stock: '',
-      categoryId: categories.length > 0 ? categories[0].id.toString() : '',
+      categoryId: firstCatId,
       description: '',
       image: '',
       colorsInput: '',
@@ -126,11 +147,15 @@ const AdminProducts = () => {
   const openEditModal = (product) => {
     setModalMode('edit');
     setEditingId(product.id);
+    const rawCat = product.categoryId;
+    const resolvedCatId = typeof rawCat === 'object' && rawCat !== null
+      ? String(rawCat.id || rawCat._id || '')
+      : String(rawCat || product.category?.id || product.category?._id || '');
     setFormData({
       name: product.name,
       price: product.price.toString(),
       stock: product.stock.toString(),
-      categoryId: product.categoryId ? product.categoryId.toString() : '',
+      categoryId: resolvedCatId,
       description: product.description || '',
       image: product.image || '',
       colorsInput: product.options?.colors?.join(', ') || '',
@@ -152,8 +177,8 @@ const AdminProducts = () => {
     const payload = {
       name: formData.name,
       price: parseFloat(formData.price),
-      stock: parseInt(formData.stock),
-      categoryId: parseInt(formData.categoryId),
+      stock: parseInt(formData.stock, 10),
+      categoryId: formData.categoryId,
       description: formData.description,
       image: formData.image,
       options: { colors, sizes }
@@ -174,24 +199,19 @@ const AdminProducts = () => {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete product "${name}"?`)) {
-      try {
-        await api.products.delete(id);
-        showToast('Product deleted successfully!', 'success');
-        loadData();
-      } catch (err) {
-        showToast(err.message || 'Failed to delete product.', 'error');
-      }
+  const handleDelete = async (id) => {
+    try {
+      await api.products.delete(id);
+      showToast('Product deleted successfully!', 'success');
+      setConfirmDeleteId(null);
+      loadData();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete product.', 'error');
     }
   };
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', minimumFractionDigits: 0 }).format(value);
-  };
-
   return (
-    <div style={{ padding: '40px 5%' }}>
+    <div className="admin-page-container">
       
       {/* Header and Back Link */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
@@ -210,7 +230,7 @@ const AdminProducts = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
         
         {/* Metric Card 1: Revenue */}
-        <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="admin-surface" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>TOTAL INVENTORY REVENUE</span>
             <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
@@ -226,7 +246,7 @@ const AdminProducts = () => {
         </div>
 
         {/* Metric Card 2: Active Orders */}
-        <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="admin-surface" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>SYSTEM ORDERS</span>
             <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
@@ -242,7 +262,7 @@ const AdminProducts = () => {
         </div>
 
         {/* Metric Card 3: Stock Alerts */}
-        <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="admin-surface" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>LOW STOCK ALERTS</span>
             <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
@@ -260,7 +280,7 @@ const AdminProducts = () => {
       </div>
 
       {/* Bottom Section: Comprehensive Product Inventory Table */}
-      <div className="glass-card" style={{ padding: '28px', borderRadius: '20px' }}>
+      <div className="admin-surface" style={{ padding: '28px', borderRadius: '20px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '20px' }}>Product List</h2>
         
         {loading ? (
@@ -312,7 +332,7 @@ const AdminProducts = () => {
                         style={{ 
                           borderBottom: '1px solid var(--glass-border)', 
                           color: 'var(--text-primary)',
-                          background: isSelected ? 'rgba(124, 58, 237, 0.04)' : 'none',
+                          background: isSelected ? 'rgba(36, 84, 244, 0.08)' : 'none',
                           transition: 'var(--transition-fast)'
                         }}
                       >
@@ -321,13 +341,14 @@ const AdminProducts = () => {
                             type="checkbox" 
                             checked={isSelected}
                             onChange={() => handleSelectProduct(prod.id)}
-                            style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+                            style={{ accentColor: 'var(--brand)', width: '16px', height: '16px', cursor: 'pointer' }}
                           />
                         </td>
                         <td style={{ padding: '14px 12px' }}>
                           {/* Circular/Rounded thumbnail */}
                           <img 
-                            src={prod.image || 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&q=80&w=800'} 
+                            src={getSafeImageUrl(prod.image)} 
+                            onError={handleImageError}
                             alt={prod.name} 
                             style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--glass-border)' }} 
                           />
@@ -336,7 +357,7 @@ const AdminProducts = () => {
                           {prod.name}
                         </td>
                         <td style={{ padding: '14px 12px' }}>{prod.category?.name || 'Uncategorized'}</td>
-                        <td style={{ padding: '14px 12px', fontWeight: '700', color: 'var(--color-secondary)' }}>
+                        <td style={{ padding: '14px 12px', fontWeight: '700', color: 'var(--brand)' }}>
                           {formatVND(prod.price)}
                         </td>
                         <td style={{ padding: '14px 12px', fontWeight: '600' }}>{prod.stock} units</td>
@@ -347,17 +368,36 @@ const AdminProducts = () => {
                           </span>
                         </td>
                         <td style={{ padding: '14px 12px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '8px' }}>
-                            <Link to={`/product/${prod.id}`} className="btn btn-secondary action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="View Details">
-                              <Eye size={14} />
-                            </Link>
-                            <button onClick={() => openEditModal(prod)} className="btn btn-accent action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="Edit">
-                              <Edit2 size={14} />
-                            </button>
-                            <button onClick={() => handleDelete(prod.id, prod.name)} className="btn btn-danger action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="Delete">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          {confirmDeleteId === prod.id ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(prod.id)}
+                                style={{ padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'inline-flex', gap: '8px' }}>
+                              <Link to={`/product/${prod.id}`} className="btn btn-secondary action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="View Details">
+                                <Eye size={14} />
+                              </Link>
+                              <button onClick={() => openEditModal(prod)} className="btn btn-accent action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="Edit">
+                                <Edit2 size={14} />
+                              </button>
+                              <button onClick={() => setConfirmDeleteId(prod.id)} className="btn btn-danger action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="Delete">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -413,7 +453,7 @@ const AdminProducts = () => {
           zIndex: 1000,
           padding: '20px'
         }}>
-          <div className="glass-card" style={{ maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '32px', position: 'relative', border: '1px solid var(--glass-border)' }}>
+          <div className="admin-surface-elevated" style={{ maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '32px', position: 'relative' }}>
             <button 
               onClick={() => setIsModalOpen(false)}
               style={{ position: 'absolute', right: '20px', top: '20px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
@@ -475,21 +515,52 @@ const AdminProducts = () => {
                 >
                   <option value="" disabled>-- Select Category --</option>
                   {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    <option key={cat.id || cat._id} value={cat.id || cat._id}>{cat.name}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Image URL</label>
-                <input 
-                  type="text" 
-                  name="image" 
-                  value={formData.image}
-                  onChange={handleInputChange}
-                  placeholder="https://example.com/image.jpg"
-                  className="glass-input"
-                />
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Product Image</label>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input 
+                    type="text" 
+                    name="image" 
+                    value={formData.image}
+                    onChange={handleInputChange}
+                    placeholder="https://example.com/image.jpg or upload below"
+                    className="glass-input"
+                    style={{ flex: 1 }}
+                  />
+                  <label 
+                    className="btn btn-secondary" 
+                    style={{ 
+                      padding: '0 14px', 
+                      height: '42px', 
+                      fontSize: '12px', 
+                      cursor: uploadingImage ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {uploadingImage ? 'Uploading...' : 'Upload File'}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleFileUpload} 
+                      disabled={uploadingImage}
+                      style={{ display: 'none' }} 
+                    />
+                  </label>
+                </div>
+                {formData.image && (
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <img src={getSafeImageUrl(formData.image)} onError={handleImageError} alt="Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--glass-border)' }} />
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Preview thumbnail</span>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
