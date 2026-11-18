@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { Category } from '../models/Category';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
+import { Coupon } from '../models/Coupon';
 import {
   buildLargeSeedCatalog,
   buildExtendedTemplates,
@@ -681,6 +682,58 @@ export const seedDatabase = async () => {
         console.log(`✔ Seeded ${ordersToInsert.length} historical orders spread across the last 6 months`);
       }
     }
+
+    // 5. Seed Default Coupons (upsert by code to avoid duplicates on restart)
+    const now = new Date();
+    const oneYearLater = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    const defaultCoupons = [
+      {
+        code: 'UCONEXT10',
+        discountType: 'percentage' as const,
+        discountValue: 10,
+        minOrderAmount: 0,
+        maxDiscountAmount: 300000,
+        startDate: now,
+        endDate: oneYearLater,
+        usageLimit: 1000,
+        usedCount: 0,
+        perUserLimit: 5,
+        isDeleted: false,
+      },
+      {
+        code: 'WELCOME50K',
+        discountType: 'fixed' as const,
+        discountValue: 50000,
+        minOrderAmount: 500000,
+        startDate: now,
+        endDate: oneYearLater,
+        usageLimit: 1000,
+        usedCount: 0,
+        perUserLimit: 1,
+        isDeleted: false,
+      },
+      {
+        code: 'VIP200K',
+        discountType: 'fixed' as const,
+        discountValue: 200000,
+        minOrderAmount: 2000000,
+        startDate: now,
+        endDate: oneYearLater,
+        usageLimit: 500,
+        usedCount: 0,
+        perUserLimit: 1,
+        isDeleted: false,
+      },
+    ];
+
+    for (const couponData of defaultCoupons) {
+      await Coupon.findOneAndUpdate(
+        { code: couponData.code },
+        { $setOnInsert: couponData },
+        { upsert: true, new: true }
+      );
+    }
+    console.log('✔ Ensured default coupons (UCONEXT10, WELCOME50K, VIP200K)');
   } catch (err: any) {
     console.error('❌ Database seeding error:', err.message);
   }

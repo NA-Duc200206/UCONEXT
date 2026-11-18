@@ -6,7 +6,7 @@ const router = Router();
 
 // Public / Authenticated check
 router.get('/active', couponController.getActiveCoupons);
-router.post('/validate', authenticateToken, couponController.validateCoupon);
+router.post('/validate', couponController.validateCoupon);
 
 // Admin CRUD
 router.get('/', authenticateToken, isAdmin, couponController.getAll);
