@@ -85,5 +85,22 @@ export const orderController = {
         error: error.message
       });
     }
+  },
+
+  async requestRefund(req: any, res: Response) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body || {};
+      const order = await orderService.requestRefund(id, req.user._id, reason);
+      return res.status(200).json({
+        message: 'Refund request submitted successfully.',
+        order
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message || 'Failed to submit refund request.',
+        error: error.message
+      });
+    }
   }
 };

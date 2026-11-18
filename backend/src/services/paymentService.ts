@@ -1,6 +1,23 @@
 import crypto from 'crypto';
 import qs from 'qs';
-import { Order, Product } from '../models';
+import { Order, Product, Coupon } from '../models';
+
+async function handleFailedPayment(order: any, note: string) {
+  if (order.status === 'cancelled') return;
+
+  order.paymentStatus = 'failed';
+  order.status = 'cancelled';
+  order.statusHistory.push({ status: 'cancelled', timestamp: new Date(), note });
+  await order.save();
+
+  for (const item of order.items) {
+    await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+  }
+
+  if (order.couponCode) {
+    await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
+  }
+}
 
 function sortObject(obj: any) {
   const sorted: any = {};
@@ -131,16 +148,7 @@ export const paymentService = {
       await order.save();
       return { success: true, orderId: order._id, message: 'Payment completed successfully.' };
     } else {
-      if (order.status !== 'cancelled') {
-        order.paymentStatus = 'failed';
-        order.status = 'cancelled';
-        order.statusHistory.push({ status: 'cancelled', timestamp: new Date(), note: `Payment failed (VNPAY code: ${responseCode}).` });
-        await order.save();
-
-        for (const item of order.items) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-        }
-      }
+      await handleFailedPayment(order, `Payment failed (VNPAY code: ${responseCode}).`);
       return { success: false, orderId: order._id, message: 'Payment failed.' };
     }
   },
@@ -187,16 +195,7 @@ export const paymentService = {
       order.statusHistory.push({ status: 'confirmed', timestamp: new Date(), note: 'Payment verified via IPN callback.' });
       await order.save();
     } else {
-      if (order.status !== 'cancelled') {
-        order.paymentStatus = 'failed';
-        order.status = 'cancelled';
-        order.statusHistory.push({ status: 'cancelled', timestamp: new Date(), note: `Payment failed via IPN callback (code: ${responseCode}).` });
-        await order.save();
-
-        for (const item of order.items) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-        }
-      }
+      await handleFailedPayment(order, `Payment failed via IPN callback (code: ${responseCode}).`);
     }
 
     return { RspCode: '00', Message: 'Confirm Success' };

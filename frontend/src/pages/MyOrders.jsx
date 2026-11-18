@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import { subscribeToEvent } from '../services/socket';
 import { useToast } from '../context/ToastContext';
 import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
-import { Package, Calendar, CreditCard, ShoppingBag, AlertTriangle } from 'lucide-react';
+import { Package, Calendar, CreditCard, ShoppingBag, AlertTriangle, Tag, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const ORDER_TABS = [
@@ -22,6 +22,9 @@ const MyOrders = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [confirmCancelId, setConfirmCancelId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+  const [confirmRefundId, setConfirmRefundId] = useState(null);
+  const [refundingId, setRefundingId] = useState(null);
+  const [refundReason, setRefundReason] = useState('');
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -125,6 +128,23 @@ const MyOrders = () => {
       showToast(err.message || 'Failed to cancel order.', 'error');
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handleConfirmRequestRefund = async (orderId) => {
+    setRefundingId(orderId);
+    try {
+      const res = await api.orders.requestRefund(orderId, refundReason);
+      showToast('Refund request submitted successfully.', 'success');
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, ...(res.order || {}), status: 'refund_requested' } : o))
+      );
+      setConfirmRefundId(null);
+      setRefundReason('');
+    } catch (err) {
+      showToast(err.message || 'Failed to submit refund request.', 'error');
+    } finally {
+      setRefundingId(null);
     }
   };
 
@@ -252,6 +272,8 @@ const MyOrders = () => {
             {filteredOrders.map((order) => {
               const isConfirmingCancel = confirmCancelId === order.id;
               const isCancelling = cancellingId === order.id;
+              const isConfirmingRefund = confirmRefundId === order.id;
+              const isRefunding = refundingId === order.id;
               return (
                 <div
                   key={order.id}
@@ -346,10 +368,20 @@ const MyOrders = () => {
                       marginTop: '4px',
                     }}
                   >
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CreditCard size={14} />
-                      <span>Payment: {order.paymentMethod === 'vnpay' ? 'VNPAY Online' : 'COD (Cash on Delivery)'}</span>
-                      <span>({order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'})</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CreditCard size={14} />
+                        <span>Payment: {order.paymentMethod === 'vnpay' ? 'VNPAY Online' : 'COD (Cash on Delivery)'}</span>
+                        <span>({order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'})</span>
+                      </div>
+                      {(order.couponCode || order.discountAmount > 0) && (
+                        <div style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+                          <Tag size={13} />
+                          <span>
+                            Coupon {order.couponCode ? `"${order.couponCode}"` : 'Applied'}: -{formatCurrency(order.discountAmount || 0)}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
@@ -390,6 +422,28 @@ const MyOrders = () => {
                           }}
                         >
                           Cancel Order
+                        </button>
+                      )}
+
+                      {(order.status === 'delivered' || order.status === 'completed') && !isConfirmingRefund && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmRefundId(order.id);
+                            setRefundReason('');
+                          }}
+                          className="btn btn-secondary"
+                          style={{
+                            padding: '8px 16px',
+                            fontSize: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            color: '#f59e0b',
+                            borderColor: 'rgba(245, 158, 11, 0.35)',
+                          }}
+                        >
+                          <RotateCcw size={13} /> Request Refund
                         </button>
                       )}
                     </div>
@@ -441,6 +495,78 @@ const MyOrders = () => {
                         >
                           {isCancelling ? 'Cancelling...' : 'Confirm Cancel'}
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inline Refund Request Confirmation */}
+                  {isConfirmingRefund && (
+                    <div
+                      role="region"
+                      aria-label="Refund request"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '14px 16px',
+                        borderRadius: '12px',
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '13px', fontWeight: '600' }}>
+                        <RotateCcw size={15} />
+                        <span>Request a refund for Order #{order.id}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={refundReason}
+                          onChange={(e) => setRefundReason(e.target.value)}
+                          placeholder="Reason for refund (optional)..."
+                          disabled={isRefunding}
+                          style={{
+                            flex: 1,
+                            minWidth: '220px',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--glass-border)',
+                            background: 'var(--bg-primary)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            outline: 'none',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmRefundId(null);
+                              setRefundReason('');
+                            }}
+                            disabled={isRefunding}
+                            className="btn btn-secondary"
+                            style={{ padding: '7px 14px', fontSize: '12px' }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmRequestRefund(order.id)}
+                            disabled={isRefunding}
+                            className="btn"
+                            style={{
+                              padding: '7px 14px',
+                              fontSize: '12px',
+                              background: '#f59e0b',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontWeight: '700',
+                            }}
+                          >
+                            {isRefunding ? 'Submitting...' : 'Submit Refund Request'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
