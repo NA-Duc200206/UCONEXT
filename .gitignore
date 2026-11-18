@@ -45,4 +45,4 @@ backup/
 .production/
 
 # Context windows 
-context/
+/context/

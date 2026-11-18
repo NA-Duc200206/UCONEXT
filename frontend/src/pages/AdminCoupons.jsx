@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, Ticket, Plus, Trash2, Calendar, Tag, Check, Copy } from 'lucide-react';
+import { formatVND } from '../utils/formatters';
 
 const AdminCoupons = () => {
   const { isAdmin } = useAuth();
@@ -14,6 +15,7 @@ const AdminCoupons = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // New Coupon Form state
   const [formData, setFormData] = useState({
@@ -55,8 +57,16 @@ const AdminCoupons = () => {
       showToast('Coupon code is required.', 'warning');
       return;
     }
-    if (formData.discountValue <= 0) {
+    if (Number(formData.discountValue) <= 0) {
       showToast('Discount value must be greater than zero.', 'warning');
+      return;
+    }
+    if (formData.discountType === 'percentage' && Number(formData.discountValue) > 100) {
+      showToast('Percentage discount cannot exceed 100%.', 'warning');
+      return;
+    }
+    if (new Date(formData.endDate + 'T23:59:59') <= new Date(formData.startDate)) {
+      showToast('Expiry date must be after start date.', 'warning');
       return;
     }
 
@@ -94,10 +104,10 @@ const AdminCoupons = () => {
   };
 
   const handleDeleteCoupon = async (id, code) => {
-    if (!window.confirm(`Are you sure you want to delete coupon ${code}?`)) return;
     try {
       await api.coupons.delete(id);
       showToast(`Coupon ${code} removed.`, 'success');
+      setConfirmDeleteId(null);
       loadCoupons();
     } catch (err) {
       showToast(err.message || 'Failed to delete coupon.', 'error');
@@ -109,12 +119,8 @@ const AdminCoupons = () => {
     showToast(`Copied ${code} to clipboard!`, 'info');
   };
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', minimumFractionDigits: 0 }).format(value);
-  };
-
   return (
-    <div style={{ padding: '40px 5%' }}>
+    <div className="admin-page-container">
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <Link 
@@ -134,7 +140,7 @@ const AdminCoupons = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Ticket size={28} color="var(--color-primary)" /> Discount Coupons & Vouchers
+              <Ticket size={28} color="var(--brand)" /> Discount Coupons & Vouchers
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
               Create and manage promotional discount vouchers for checkout campaigns.
@@ -156,7 +162,7 @@ const AdminCoupons = () => {
           Loading coupons...
         </div>
       ) : coupons.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+        <div className="admin-surface" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
           <Ticket size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
           <p style={{ fontSize: '16px', fontWeight: '500' }}>No discount coupons created yet.</p>
           <button 
@@ -178,7 +184,7 @@ const AdminCoupons = () => {
             return (
               <div 
                 key={c.id || c._id} 
-                className="glass-card" 
+                className="admin-surface" 
                 style={{ 
                   padding: '24px', 
                   display: 'flex', 
@@ -196,7 +202,7 @@ const AdminCoupons = () => {
                   left: 0,
                   right: 0,
                   height: '4px',
-                  background: isActive ? 'var(--color-primary)' : '#ef4444'
+                  background: isActive ? 'var(--brand)' : '#ef4444'
                 }} />
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -242,7 +248,7 @@ const AdminCoupons = () => {
                 </div>
 
                 <div style={{
-                  background: 'var(--bg-secondary)',
+                  background: 'var(--bg-elevated)',
                   borderRadius: '10px',
                   padding: '12px',
                   fontSize: '13px',
@@ -252,7 +258,7 @@ const AdminCoupons = () => {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Discount:</span>
-                    <strong style={{ color: 'var(--color-secondary)' }}>
+                    <strong style={{ color: 'var(--brand)' }}>
                       {c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `-${formatVND(c.discountValue)}`}
                     </strong>
                   </div>
@@ -277,22 +283,42 @@ const AdminCoupons = () => {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
-                  <button 
-                    onClick={() => handleDeleteCoupon(c.id || c._id, c.code)} 
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: 'none',
-                      border: 'none',
-                      color: '#ef4444',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      padding: '4px 8px'
-                    }}
-                  >
-                    <Trash2 size={13} /> Delete
-                  </button>
+                  {confirmDeleteId === (c.id || c._id) ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Delete {c.code}?</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCoupon(c.id || c._id, c.code)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(null)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setConfirmDeleteId(c.id || c._id)} 
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'none',
+                        border: 'none',
+                        color: '#ef4444',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        padding: '4px 8px'
+                      }}
+                    >
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -316,7 +342,7 @@ const AdminCoupons = () => {
           zIndex: 1000,
           padding: '20px'
         }}>
-          <div className="glass-card" style={{ maxWidth: '520px', width: '100%', padding: '32px', borderRadius: '20px' }}>
+          <div className="admin-surface-elevated" style={{ maxWidth: '520px', width: '100%', padding: '32px', borderRadius: '20px' }}>
             <h3 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '20px' }}>
               Create New Discount Voucher
             </h3>

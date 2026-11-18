@@ -1,4 +1,5 @@
-import { Coupon } from '../models';
+import { Types } from 'mongoose';
+import { Coupon, Order } from '../models';
 
 export const couponService = {
   async getActiveCoupons() {
@@ -44,6 +45,19 @@ export const couponService = {
       const error: any = new Error('Coupon usage limit has been reached.');
       error.statusCode = 400;
       throw error;
+    }
+
+    if (userId && coupon.perUserLimit > 0 && Types.ObjectId.isValid(userId)) {
+      const userUsageCount = await Order.countDocuments({
+        userId: new Types.ObjectId(userId) as any,
+        couponCode: cleanCode,
+        status: { $ne: 'cancelled' }
+      });
+      if (userUsageCount >= coupon.perUserLimit) {
+        const error: any = new Error(`You have already reached the usage limit (${coupon.perUserLimit}) for this coupon.`);
+        error.statusCode = 400;
+        throw error;
+      }
     }
 
     if (orderAmount < coupon.minOrderAmount) {

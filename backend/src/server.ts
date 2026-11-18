@@ -22,6 +22,7 @@ import analyticsRoutes from './routes/analyticsRoutes';
 import couponRoutes from './routes/couponRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import reviewRoutes from './routes/reviewRoutes';
+import wishlistRoutes from './routes/wishlistRoutes';
 import aiRoutes from './routes/aiRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import path from 'path';
@@ -50,6 +51,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/media', uploadRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/ai', aiRoutes);
 
 // Global Error Handler
