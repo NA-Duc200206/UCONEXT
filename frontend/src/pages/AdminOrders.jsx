@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, ShoppingBag, Eye, Calendar, MapPin, CreditCard } from 'lucide-react';
+import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
 
 const AdminOrders = () => {
   const { isAdmin } = useAuth();
@@ -82,10 +83,6 @@ const AdminOrders = () => {
     }
   };
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', minimumFractionDigits: 0 }).format(value);
-  };
-
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -98,13 +95,30 @@ const AdminOrders = () => {
 
   const getStatusClass = (status) => {
     switch (status) {
-      case 'pending': return 'badge-warning';
-      case 'paid': return 'badge-success';
-      case 'shipping': return 'badge-primary';
-      case 'completed': return 'badge-success';
-      case 'cancelled': return 'badge-error';
-      default: return '';
+      case 'pending':
+      case 'refund_requested':
+        return 'badge-warning';
+      case 'confirmed':
+      case 'packaging':
+        return 'badge-secondary';
+      case 'shipping':
+        return 'badge-primary';
+      case 'delivered':
+      case 'completed':
+        return 'badge-success';
+      case 'cancelled':
+      case 'refund_completed':
+        return 'badge-error';
+      default:
+        return '';
     }
+  };
+
+  const getOrderBorderColor = (status) => {
+    if (status === 'cancelled' || status === 'refund_completed') return '#ef4444';
+    if (status === 'delivered' || status === 'completed') return '#10b981';
+    if (status === 'pending' || status === 'refund_requested') return '#f59e0b';
+    return 'var(--brand)';
   };
 
   const toggleExpandOrder = (id) => {
@@ -112,7 +126,7 @@ const AdminOrders = () => {
   };
 
   return (
-    <div style={{ padding: '40px 5%' }}>
+    <div className="admin-page-container">
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <Link to="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '13px' }}>
@@ -122,7 +136,7 @@ const AdminOrders = () => {
       </div>
 
       {/* Orders Container */}
-      <div className="glass-container" style={{ padding: '24px' }}>
+      <div className="admin-surface" style={{ padding: '24px' }}>
         {loading ? (
           <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Loading orders...</p>
         ) : orders.length === 0 ? (
@@ -132,24 +146,24 @@ const AdminOrders = () => {
             {orders.map(order => (
               <div 
                 key={order.id} 
-                className="glass-card" 
+                className="admin-surface-elevated" 
                 style={{ 
                   padding: '20px', 
-                  borderLeft: `4px solid ${order.status === 'cancelled' ? 'var(--color-error)' : order.status === 'completed' ? 'var(--color-success)' : 'var(--color-primary)'}`,
+                  borderLeft: `4px solid ${getOrderBorderColor(order.status)}`,
                   transition: 'var(--transition-smooth)'
                 }}
               >
                 {/* Summary Info */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontWeight: '700', fontSize: '16px' }}>Order #{order.id}</span>
+                    <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>Order #{order.id}</span>
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Customer: {order.user?.name} ({order.user?.email})</span>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block' }}>Total</span>
-                      <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-secondary)' }}>{formatVND(order.totalAmount)}</span>
+                      <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--brand)' }}>{formatVND(order.totalAmount)}</span>
                     </div>
 
                     {/* Status Update Select */}
@@ -161,10 +175,14 @@ const AdminOrders = () => {
                         style={{ border: 'none', padding: '6px 10px', fontSize: '11px', cursor: 'pointer', outline: 'none' }}
                       >
                         <option value="pending">Pending</option>
-                        <option value="paid">Paid</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="packaging">Packaging</option>
                         <option value="shipping">Shipping</option>
+                        <option value="delivered">Delivered</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
+                        <option value="refund_requested">Refund Requested</option>
+                        <option value="refund_completed">Refund Completed</option>
                       </select>
                     </div>
 
@@ -180,7 +198,7 @@ const AdminOrders = () => {
 
                 {/* Expanded Details Panel */}
                 {expandedOrderId === order.id && (
-                  <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px dashed rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px dashed var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     
                     {/* Meta info columns */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', fontSize: '13px' }}>
@@ -226,7 +244,7 @@ const AdminOrders = () => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {order.items?.map((item, idx) => (
                           <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '13px' }}>
-                            <img src={item.product?.image} alt={item.product?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                            <img src={getSafeImageUrl(item.product?.image)} onError={handleImageError} alt={item.product?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
                             <div style={{ flex: 1 }}>
                               <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{item.product?.name}</span>
                               <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>

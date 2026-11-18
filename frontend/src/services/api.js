@@ -135,6 +135,13 @@ export const api = {
     delete: (id) => request(`/reviews/${id}`, { method: 'DELETE' }),
   },
 
+  // Wishlist
+  wishlist: {
+    getAll: () => request('/wishlist'),
+    toggle: (productId) => request(`/wishlist/${productId}`, { method: 'POST' }),
+    remove: (productId) => request(`/wishlist/${productId}`, { method: 'DELETE' }),
+  },
+
   // AI Assistant
   ai: {
     chat: (message) => request('/ai/chat', { method: 'POST', body: { message } }),

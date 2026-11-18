@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { couponController } from '../controllers/couponController';
-import { authenticateToken, isAdmin } from '../middleware/auth';
+import { authenticateToken, isAdmin, optionalAuthenticateToken } from '../middleware/auth';
 
 const router = Router();
 
 // Public / Authenticated check
 router.get('/active', couponController.getActiveCoupons);
-router.post('/validate', couponController.validateCoupon);
+router.post('/validate', optionalAuthenticateToken, couponController.validateCoupon);
 
 // Admin CRUD
 router.get('/', authenticateToken, isAdmin, couponController.getAll);
