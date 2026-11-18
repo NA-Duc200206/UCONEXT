@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +41,7 @@ const Cart = () => {
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [couponFeedback, setCouponFeedback] = useState(null);
   const [activeCoupons, setActiveCoupons] = useState([]);
+  const validatedSubtotalRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -78,6 +79,7 @@ const Cart = () => {
     setValidatingCoupon(true);
     try {
       const res = await api.coupons.validate(trimmed, subtotal);
+      validatedSubtotalRef.current = subtotal;
       setDiscountAmount(res.discountAmount);
       setAppliedCode(res.code);
       setCouponFeedback({
@@ -85,23 +87,47 @@ const Cart = () => {
         message: `Coupon "${res.code}" applied (-${formatCurrency(res.discountAmount)}).`,
       });
     } catch (err) {
-      // Fallback promo codes
-      const cleanCode = trimmed.toUpperCase();
-      if (cleanCode === 'UCONEXT' || cleanCode === 'GLOW10' || cleanCode === 'SALE10') {
-        const disc = Math.round(subtotal * 0.1);
-        setDiscountAmount(disc);
-        setAppliedCode(cleanCode);
-        setCouponFeedback({
-          type: 'success',
-          message: `Promo code "${cleanCode}" applied (10% discount).`,
-        });
-      } else {
-        setCouponFeedback({ type: 'error', message: err.message || 'Invalid or expired coupon code.' });
-      }
+      validatedSubtotalRef.current = null;
+      setAppliedCode('');
+      setDiscountAmount(0);
+      setCouponFeedback({ type: 'error', message: err.message || 'Invalid or expired coupon code.' });
     } finally {
       setValidatingCoupon(false);
     }
   };
+
+  // Re-validate applied coupon if cart subtotal changes so discount matches backend orderService
+  useEffect(() => {
+    if (!appliedCode || subtotal <= 0) return;
+    if (validatedSubtotalRef.current === subtotal) return;
+
+    let cancelled = false;
+    const revalidate = async () => {
+      try {
+        const res = await api.coupons.validate(appliedCode, subtotal);
+        if (cancelled) return;
+        validatedSubtotalRef.current = subtotal;
+        setDiscountAmount(res.discountAmount);
+        setCouponFeedback({
+          type: 'success',
+          message: `Coupon "${res.code}" applied (-${formatCurrency(res.discountAmount)}).`,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        validatedSubtotalRef.current = null;
+        setAppliedCode('');
+        setDiscountAmount(0);
+        setCouponFeedback({
+          type: 'error',
+          message: err.message || 'Coupon is no longer valid for the updated cart total.',
+        });
+      }
+    };
+    revalidate();
+    return () => {
+      cancelled = true;
+    };
+  }, [subtotal, appliedCode]);
 
   const handleApplyPromoCode = (e) => {
     e.preventDefault();
@@ -109,6 +135,7 @@ const Cart = () => {
   };
 
   const handleRemoveCoupon = () => {
+    validatedSubtotalRef.current = null;
     setAppliedCode('');
     setDiscountAmount(0);
     setPromoCode('');
