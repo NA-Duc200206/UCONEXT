@@ -86,6 +86,8 @@ export const orderService = {
       paymentStatus: 'pending',
       status: 'pending',
       items: orderItems as any,
+      couponCode: appliedCoupon || undefined,
+      discountAmount,
       totalAmount,
       statusHistory: [{ status: 'pending', timestamp: new Date(), note: `Order placed successfully.${appliedCoupon ? ` (Coupon: ${appliedCoupon})` : ''}` }]
     } as any);
@@ -247,9 +249,12 @@ export const orderService = {
     order.status = 'cancelled';
     order.statusHistory.push({ status: 'cancelled', timestamp: new Date(), note: 'Order cancelled by customer.' });
 
-    // Restock
+    // Restock & restore coupon usage
     for (const item of order.items) {
       await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+    }
+    if (order.couponCode) {
+      await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
     }
 
     await order.save();
@@ -270,6 +275,49 @@ export const orderService = {
       emailService.sendOrderStatusUpdate((populatedOrder as any).userId.email, obj._id.toString(), 'cancelled');
     }
 
+    return result;
+  },
+
+  async requestRefund(id: string, userId: string, reason?: string) {
+    const order = await Order.findById(id);
+    if (!order) {
+      const error: any = new Error('Order does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (order.userId.toString() !== userId.toString()) {
+      const error: any = new Error('You do not have permission to request a refund for this order.');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    if (order.status !== 'delivered' && order.status !== 'completed') {
+      const error: any = new Error(`Cannot request refund for order in "${order.status}" status.`);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const cleanReason = reason?.trim();
+    const note = cleanReason
+      ? `Refund requested by customer: ${cleanReason}`
+      : 'Refund requested by customer.';
+
+    order.status = 'refund_requested';
+    order.statusHistory.push({ status: 'refund_requested', timestamp: new Date(), note });
+    await order.save();
+
+    const populatedOrder = await Order.findById(id)
+      .populate('userId', 'name email')
+      .populate('items.productId', 'name image');
+
+    const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
+    const result = {
+      ...obj,
+      id: obj._id
+    };
+
+    emitEvent('order:updated', result);
     return result;
   }
 };

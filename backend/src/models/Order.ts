@@ -23,6 +23,8 @@ export interface IOrder extends Document {
   paymentStatus: 'pending' | 'paid' | 'failed';
   status: 'pending' | 'confirmed' | 'packaging' | 'shipping' | 'delivered' | 'completed' | 'cancelled' | 'refund_requested' | 'refund_completed';
   items: IOrderItem[];
+  couponCode?: string;
+  discountAmount?: number;
   totalAmount: number;
   statusHistory: IOrderStatusHistory[];
   vnpayTxnRef?: string;
@@ -57,6 +59,8 @@ const OrderSchema = new Schema<IOrder>({
     default: 'pending'
   },
   items: { type: [OrderItemSchema], required: true },
+  couponCode: { type: String },
+  discountAmount: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
   statusHistory: { type: [OrderStatusHistorySchema], default: [] },
   vnpayTxnRef: { type: String }
