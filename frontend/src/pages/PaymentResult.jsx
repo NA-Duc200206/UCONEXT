@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { CheckCircle2, XCircle, ShoppingBag, Loader2, ArrowRight } from 'lucide-react';
+import { Check, X, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const PaymentResult = () => {
@@ -89,7 +89,7 @@ const PaymentResult = () => {
   if (loading) {
     return (
       <div style={{ padding: '80px 5%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
-        <Loader2 size={48} className="animate-spin" style={{ color: 'var(--color-primary)', marginBottom: '24px' }} />
+        <Loader2 size={36} strokeWidth={1.75} className="animate-spin" style={{ color: 'var(--text-primary)', marginBottom: '24px' }} />
         <h2 style={{ fontSize: '20px', color: 'var(--text-primary)' }}>Verifying transaction details...</h2>
         <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Please do not close or reload this page.</p>
         
@@ -126,33 +126,31 @@ const PaymentResult = () => {
         <div style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: '24px' }}>
           {isSuccess ? (
             <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
+              width: '68px',
+              height: '68px',
+              borderRadius: '18px',
               background: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--color-success)',
-              boxShadow: '0 0 20px rgba(16, 185, 129, 0.2)'
+              color: 'var(--color-success)'
             }}>
-              <CheckCircle2 size={48} />
+              <Check size={30} strokeWidth={2.25} />
             </div>
           ) : (
             <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
+              width: '68px',
+              height: '68px',
+              borderRadius: '18px',
               background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--color-error)',
-              boxShadow: '0 0 20px rgba(239, 68, 68, 0.2)'
+              color: 'var(--color-error)'
             }}>
-              <XCircle size={48} />
+              <X size={30} strokeWidth={2.25} />
             </div>
           )}
         </div>

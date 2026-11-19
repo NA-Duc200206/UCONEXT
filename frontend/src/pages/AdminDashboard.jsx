@@ -82,10 +82,10 @@ const AdminDashboard = () => {
   })) || [];
 
   const statCards = [
-    { title: 'Cumulative Revenue', value: formatVND(data.stats?.totalRevenue), icon: <DollarSign size={20} color="#34d399" />, glow: 'rgba(16, 185, 129, 0.15)' },
-    { title: 'Total Orders', value: data.stats?.totalOrders, icon: <ShoppingCart size={20} color="#3b82f6" />, glow: 'rgba(59, 130, 246, 0.15)' },
-    { title: 'Registered Customers', value: data.stats?.totalUsers, icon: <Users size={20} color="#64748b" />, glow: 'rgba(100, 116, 139, 0.15)' },
-    { title: 'Pending Orders', value: data.stats?.statusCounts?.pending || 0, icon: <Package size={20} color="#f59e0b" />, glow: 'rgba(245, 158, 11, 0.15)' }
+    { title: 'Cumulative Revenue', value: formatVND(data.stats?.totalRevenue), icon: <DollarSign size={20} strokeWidth={1.75} /> },
+    { title: 'Total Orders', value: data.stats?.totalOrders, icon: <ShoppingCart size={20} strokeWidth={1.75} /> },
+    { title: 'Registered Customers', value: data.stats?.totalUsers, icon: <Users size={20} strokeWidth={1.75} /> },
+    { title: 'Pending Orders', value: data.stats?.statusCounts?.pending || 0, icon: <Package size={20} strokeWidth={1.75} /> }
   ];
 
   return (
@@ -94,7 +94,7 @@ const AdminDashboard = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
           <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <LayoutDashboard size={32} color="var(--brand)" /> Admin Dashboard
+            <span className="ui-icon-box-lg"><LayoutDashboard size={20} strokeWidth={1.75} /></span> Admin Dashboard
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Welcome admin, {user?.name}</p>
         </div>
@@ -124,16 +124,7 @@ const AdminDashboard = () => {
               <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>{card.title}</span>
               <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)' }}>{card.value}</span>
             </div>
-            <div style={{
-              width: '46px',
-              height: '46px',
-              borderRadius: '12px',
-              background: card.glow,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: `0 0 15px ${card.glow}`
-            }}>
+            <div className="ui-icon-box-lg">
               {card.icon}
             </div>
           </div>

@@ -25,6 +25,14 @@ router.get('/me', authenticateToken, authController.getProfile);
 router.put('/me', authenticateToken, authController.updateProfile);
 router.put('/password', authLimiter, authenticateToken, authController.changePassword);
 router.put('/cart', authenticateToken, authController.syncCart);
+router.put('/preferences', authenticateToken, authController.updatePreferences);
+router.get('/addresses', authenticateToken, authController.getAddresses);
+router.post('/addresses', authenticateToken, authController.addAddress);
+router.put('/addresses/:addressId', authenticateToken, authController.updateAddress);
+router.delete('/addresses/:addressId', authenticateToken, authController.deleteAddress);
+router.get('/recently-viewed', authenticateToken, authController.getRecentlyViewed);
+router.post('/recently-viewed/:productId', authenticateToken, authController.recordRecentlyViewed);
+router.delete('/recently-viewed', authenticateToken, authController.clearRecentlyViewed);
 
 // Admin User Management
 router.get('/users', authenticateToken, isAdmin, authController.getAllUsers);

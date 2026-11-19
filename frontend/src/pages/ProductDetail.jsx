@@ -137,7 +137,7 @@ const ProductDetail = () => {
           };
           localStorage.setItem(
             'uconext_recently_viewed',
-            JSON.stringify([snapshot, ...previousOthers].slice(0, 8))
+            JSON.stringify([snapshot, ...previousOthers].slice(0, 16))
           );
         } catch {
           // Ignore storage quota or JSON parse errors
@@ -166,6 +166,49 @@ const ProductDetail = () => {
 
     fetchProduct();
   }, [id, navigate]);
+
+  // Sync Recently Viewed with user account across devices/sessions
+  useEffect(() => {
+    const currentId = product?._id || product?.id;
+    const userId = user?._id || user?.id;
+    if (!userId || !currentId) return;
+
+    let cancelled = false;
+    const syncRecentlyViewed = async () => {
+      try {
+        let res;
+        try {
+          res = await api.auth.addRecentlyViewed(currentId);
+        } catch {
+          res = await api.auth.getRecentlyViewed();
+        }
+        if (cancelled) return;
+
+        const syncedList = Array.isArray(res?.products) ? res.products : [];
+        if (syncedList.length > 0) {
+          const others = syncedList.filter(
+            (item) => String(item._id || item.id) !== String(currentId)
+          );
+          setRecentlyViewed(others.slice(0, 4));
+          try {
+            localStorage.setItem(
+              'uconext_recently_viewed',
+              JSON.stringify(syncedList.slice(0, 16))
+            );
+          } catch {
+            // Ignore localStorage quota errors
+          }
+        }
+      } catch {
+        // Keep localStorage recentlyViewed fallback silently
+      }
+    };
+
+    syncRecentlyViewed();
+    return () => {
+      cancelled = true;
+    };
+  }, [product?._id, product?.id, user?._id, user?.id]);
 
   const fetchReviews = async () => {
     try {
@@ -666,7 +709,9 @@ const ProductDetail = () => {
                 {/* Reviews List */}
                 {reviews.length === 0 ? (
                   <div className="pd-empty-reviews">
-                    <MessageSquare size={36} style={{ margin: '0 auto 12px auto', opacity: 0.45 }} />
+                    <div className="ui-empty-icon">
+                      <MessageSquare size={24} strokeWidth={1.6} />
+                    </div>
                     <p style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>
                       No reviews yet for this product.
                     </p>
