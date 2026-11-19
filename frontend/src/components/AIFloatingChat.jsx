@@ -2,11 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bot, X, Send, ArrowRight, Minimize2, Ticket, ShoppingBag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
 
 const AIFloatingChat = () => {
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -20,12 +23,19 @@ const AIFloatingChat = () => {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const suggestions = [
-    "Best noise-canceling headphones",
-    "Trending fashion, apparel",
-    "Certified skincare, cosmetics",
-    "Shipping, VNPAY payments"
-  ];
+  const suggestions = user
+    ? [
+        'Gợi ý theo sở thích của tôi',
+        'Tìm sản phẩm dưới 1 triệu',
+        'Gợi ý từ danh sách yêu thích',
+        'Mã giảm giá & giao hàng'
+      ]
+    : [
+        'Tìm sản phẩm dưới 1 triệu',
+        'Best noise-canceling headphones',
+        'Certified skincare, cosmetics',
+        'Shipping, VNPAY payments'
+      ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -116,10 +126,10 @@ const AIFloatingChat = () => {
             gap: '10px',
             padding: '12px 20px',
             borderRadius: '999px',
-            background: '#2454F4',
+            background: 'var(--brand)',
             color: '#ffffff',
             border: 'none',
-            boxShadow: '0 8px 24px rgba(36, 84, 244, 0.4)',
+            boxShadow: '0 8px 20px rgba(15, 23, 42, 0.22)',
             cursor: 'pointer',
             fontSize: '14px',
             fontWeight: '700',
@@ -154,7 +164,7 @@ const AIFloatingChat = () => {
               maxWidth: 'calc(100vw - 32px)',
               height: '520px',
               maxHeight: 'calc(100vh - 100px)',
-              background: isDark ? 'rgba(18, 20, 29, 0.98)' : '#ffffff',
+              background: isDark ? 'var(--bg-secondary)' : '#ffffff',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
               border: '1px solid var(--glass-border)',
@@ -177,17 +187,8 @@ const AIFloatingChat = () => {
               justifyContent: 'space-between'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: '#2454F4',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Bot size={20} />
+                <div className="ui-icon-box" style={{ width: '36px', height: '36px' }}>
+                  <Bot size={18} strokeWidth={1.75} />
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>
@@ -195,7 +196,7 @@ const AIFloatingChat = () => {
                   </div>
                   <div style={{ fontSize: '11px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
-                    Online 24/7
+                    {user?.name ? `Online 24/7 · Personalized for ${user.name.split(' ')[0]}` : 'Online 24/7'}
                   </div>
                 </div>
               </div>
@@ -261,14 +262,14 @@ const AIFloatingChat = () => {
                     padding: '12px 16px',
                     borderRadius: msg.sender === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                     background: msg.sender === 'user' 
-                      ? '#2454F4' 
-                      : isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                      ? 'var(--brand)' 
+                      : 'var(--bg-elevated)',
                     color: msg.sender === 'user' ? '#ffffff' : 'var(--text-primary)',
                     fontSize: '13px',
                     lineHeight: '1.5',
                     border: msg.sender === 'user' ? 'none' : '1px solid var(--glass-border)'
                   }}>
-                    {msg.text}
+                    <span style={{ whiteSpace: 'pre-line' }}>{msg.text}</span>
 
                     {/* AI Product Recommendation Cards */}
                     {msg.products && msg.products.length > 0 && (
@@ -284,7 +285,7 @@ const AIFloatingChat = () => {
                               gap: '10px',
                               padding: '8px',
                               borderRadius: '10px',
-                              background: isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.8)',
+                              background: 'var(--bg-secondary)',
                               border: '1px solid var(--glass-border)',
                               textDecoration: 'none',
                               color: 'var(--text-primary)',
@@ -292,19 +293,20 @@ const AIFloatingChat = () => {
                             }}
                           >
                             <img
-                              src={prod.image || 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&q=80&w=200'}
+                              src={getSafeImageUrl(prod.image)}
                               alt={prod.name}
+                              onError={handleImageError}
                               style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
                             />
                             <div style={{ flex: 1, overflow: 'hidden' }}>
                               <div style={{ fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {prod.name}
                               </div>
-                              <div style={{ fontSize: '11px', color: 'var(--color-secondary)', fontWeight: '600' }}>
-                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', minimumFractionDigits: 0 }).format(prod.price)}
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                                {formatVND(prod.price)}
                               </div>
                             </div>
-                            <ArrowRight size={13} color="var(--color-primary)" />
+                            <ArrowRight size={13} color="var(--text-muted)" />
                           </Link>
                         ))}
                       </div>
@@ -317,19 +319,19 @@ const AIFloatingChat = () => {
                         padding: '8px 12px',
                         borderRadius: '8px',
                         background: 'rgba(245, 158, 11, 0.1)',
-                        border: '1px solid rgba(245, 158, 11, 0.2)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Ticket size={14} color="#f59e0b" />
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#fbbf24', fontFamily: 'monospace' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#f59e0b', fontFamily: 'monospace' }}>
                             {msg.coupons[0].code}
                           </span>
                         </div>
                         <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          {msg.coupons[0].discountType === 'percentage' ? `${msg.coupons[0].discountValue}% OFF` : `-${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND', minimumFractionDigits: 0 }).format(msg.coupons[0].discountValue)}`}
+                          {msg.coupons[0].discountType === 'percentage' ? `${msg.coupons[0].discountValue}% OFF` : `-${formatVND(msg.coupons[0].discountValue)}`}
                         </span>
                       </div>
                     )}
@@ -366,14 +368,15 @@ const AIFloatingChat = () => {
                   alignSelf: 'flex-start',
                   padding: '10px 16px',
                   borderRadius: '16px 16px 16px 4px',
-                  background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--glass-border)',
                   display: 'flex',
                   gap: '4px',
                   alignItems: 'center'
                 }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2454F4' }} />
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2454F4' }} />
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2454F4' }} />
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--text-muted)' }} />
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--text-muted)' }} />
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--text-muted)' }} />
                 </div>
               )}
 
@@ -398,7 +401,7 @@ const AIFloatingChat = () => {
                     fontSize: '11px',
                     fontWeight: '600',
                     whiteSpace: 'nowrap',
-                    background: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+                    background: 'var(--bg-elevated)',
                     border: '1px solid var(--glass-border)',
                     color: 'var(--text-secondary)',
                     cursor: 'pointer',
@@ -453,7 +456,7 @@ const AIFloatingChat = () => {
                   width: '38px',
                   height: '38px',
                   borderRadius: '10px',
-                  background: '#2454F4',
+                  background: 'var(--brand)',
                   color: '#ffffff',
                   border: 'none',
                   display: 'flex',

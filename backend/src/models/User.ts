@@ -10,6 +10,20 @@ export interface ICartItem {
   size?: string;
 }
 
+export interface IRecentlyViewedItem {
+  productId: Schema.Types.ObjectId;
+  viewedAt: Date;
+}
+
+export interface ISavedAddress {
+  _id?: Schema.Types.ObjectId;
+  label: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  isDefault: boolean;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -18,6 +32,9 @@ export interface IUser extends Document {
   avatar?: string;
   cart: ICartItem[];
   wishlist: Schema.Types.ObjectId[];
+  preferredCategories: Schema.Types.ObjectId[];
+  recentlyViewed: IRecentlyViewedItem[];
+  savedAddresses: ISavedAddress[];
   refreshTokens: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -33,6 +50,19 @@ const CartItemSchema = new Schema<ICartItem>({
   size: { type: String }
 }, { _id: false });
 
+const RecentlyViewedSchema = new Schema<IRecentlyViewedItem>({
+  productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  viewedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const SavedAddressSchema = new Schema<ISavedAddress>({
+  label: { type: String, required: true, trim: true, default: 'Home' },
+  fullName: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, trim: true },
+  address: { type: String, required: true, trim: true },
+  isDefault: { type: Boolean, default: false }
+});
+
 const UserSchema = new Schema<IUser>({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -45,6 +75,9 @@ const UserSchema = new Schema<IUser>({
   avatar: { type: String },
   cart: { type: [CartItemSchema], default: [] },
   wishlist: [{ type: Schema.Types.ObjectId, ref: 'Product' }],
+  preferredCategories: { type: [{ type: Schema.Types.ObjectId, ref: 'Category' }], default: [] },
+  recentlyViewed: { type: [RecentlyViewedSchema], default: [] },
+  savedAddresses: { type: [SavedAddressSchema], default: [] },
   refreshTokens: { type: [String], default: [], select: false }
 }, {
   timestamps: true

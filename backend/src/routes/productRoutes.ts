@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { productController } from '../controllers/productController';
-import { authenticateToken, isAdmin } from '../middleware/auth';
+import { authenticateToken, isAdmin, optionalAuthenticateToken } from '../middleware/auth';
 
 const router = Router();
 
 router.get('/', productController.getAll);
+router.get('/recommended', optionalAuthenticateToken, productController.getRecommended);
 router.get('/:id', productController.getById);
 router.post('/', authenticateToken, isAdmin, productController.create);
 router.put('/:id', authenticateToken, isAdmin, productController.update);

@@ -113,5 +113,126 @@ export const authController = {
         error: error.message
       });
     }
+  },
+
+  async updatePreferences(req: any, res: Response) {
+    try {
+      const user = await authService.updatePreferences(req.user, req.body?.preferredCategories);
+      return res.status(200).json({
+        message: 'Preferences updated successfully.',
+        preferredCategories: user.preferredCategories,
+        user
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message || 'Failed to update preferences.',
+        error: error.message
+      });
+    }
+  },
+
+  async getAddresses(req: any, res: Response) {
+    try {
+      const addresses = await authService.getAddresses(req.user);
+      return res.status(200).json({ addresses });
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Failed to retrieve saved addresses.',
+        error: error.message
+      });
+    }
+  },
+
+  async addAddress(req: any, res: Response) {
+    try {
+      const user = await authService.addAddress(req.user, req.body);
+      return res.status(201).json({
+        message: 'Address added successfully.',
+        addresses: user.savedAddresses,
+        user
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message || 'Failed to add address.',
+        error: error.message
+      });
+    }
+  },
+
+  async updateAddress(req: any, res: Response) {
+    try {
+      const addressId = req.params.addressId as string;
+      const user = await authService.updateAddress(req.user, addressId, req.body);
+      return res.status(200).json({
+        message: 'Address updated successfully.',
+        addresses: user.savedAddresses,
+        user
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message || 'Failed to update address.',
+        error: error.message
+      });
+    }
+  },
+
+  async deleteAddress(req: any, res: Response) {
+    try {
+      const addressId = req.params.addressId as string;
+      const user = await authService.deleteAddress(req.user, addressId);
+      return res.status(200).json({
+        message: 'Address deleted successfully.',
+        addresses: user.savedAddresses,
+        user
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message || 'Failed to delete address.',
+        error: error.message
+      });
+    }
+  },
+
+  async getRecentlyViewed(req: any, res: Response) {
+    try {
+      const products = await authService.getRecentlyViewed(req.user._id.toString());
+      return res.status(200).json({ products });
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Failed to retrieve recently viewed products.',
+        error: error.message
+      });
+    }
+  },
+
+  async recordRecentlyViewed(req: any, res: Response) {
+    try {
+      const productId = req.params.productId as string;
+      const products = await authService.recordRecentlyViewed(req.user._id.toString(), productId);
+      return res.status(200).json({
+        message: 'Recently viewed updated.',
+        products
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message || 'Failed to record recently viewed product.',
+        error: error.message
+      });
+    }
+  },
+
+  async clearRecentlyViewed(req: any, res: Response) {
+    try {
+      const products = await authService.clearRecentlyViewed(req.user._id.toString());
+      return res.status(200).json({
+        message: 'Recently viewed history cleared.',
+        products
+      });
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Failed to clear recently viewed history.',
+        error: error.message
+      });
+    }
   }
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { ProductListSkeleton } from '../components/SkeletonLoader';
@@ -340,11 +341,13 @@ const ShopProductCard = ({ product }) => {
 
 const Shop = () => {
   const { isDark } = useTheme();
+  const { user, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [allProducts, setAllProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [recommendedIds, setRecommendedIds] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState(() => {
     const q = searchParams.get('search') || '';
@@ -357,7 +360,7 @@ const Shop = () => {
   const [inStockOnly, setInStockOnly] = useState(false);
   const [onSaleOnly, setOnSaleOnly] = useState(false);
   const [minRating, setMinRating] = useState(0);
-  const [sortBy, setSortBy] = useState('featured');
+  const [sortBy, setSortBy] = useState(() => searchParams.get('sort') || 'featured');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
@@ -365,6 +368,11 @@ const Shop = () => {
   useEffect(() => {
     const paramCat = searchParams.get('categoryId');
     const paramSearch = searchParams.get('search') || '';
+    const paramSort = searchParams.get('sort');
+
+    if (paramSort === 'recommended' && user) {
+      setSortBy('recommended');
+    }
 
     if (paramCat) {
       setActiveCategory(paramCat);
@@ -385,7 +393,37 @@ const Shop = () => {
       setSearchTerm(paramSearch);
     }
     setVisibleCount(PAGE_SIZE);
-  }, [searchParams, categories]);
+  }, [searchParams, categories, user]);
+
+  useEffect(() => {
+    if (!authLoading && !user && sortBy === 'recommended') {
+      setSortBy('featured');
+    }
+  }, [authLoading, user, sortBy]);
+
+  const userPrefsKey = JSON.stringify(user?.preferredCategories || []);
+
+  useEffect(() => {
+    if (!user) {
+      setRecommendedIds([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchRecommendedOrder = async () => {
+      try {
+        const res = await api.products.getRecommended(48);
+        if (!cancelled) {
+          setRecommendedIds((res?.products || []).map((p) => String(p._id || p.id)));
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    };
+    fetchRecommendedOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?._id, user?.id, userPrefsKey]);
 
   useEffect(() => {
     let isMounted = true;
@@ -472,7 +510,27 @@ const Shop = () => {
       list = list.filter((p) => (p.rating || 0) >= minRating);
     }
 
-    if (sortBy === 'price-asc') {
+    if (sortBy === 'recommended' && user) {
+      const rankMap = new Map(recommendedIds.map((pid, idx) => [pid, idx]));
+      const prefSet = new Set((user.preferredCategories || []).map((c) => String(c?._id || c)));
+      list.sort((a, b) => {
+        const idA = String(a._id || a.id);
+        const idB = String(b._id || b.id);
+        const rankA = rankMap.has(idA) ? rankMap.get(idA) : Infinity;
+        const rankB = rankMap.has(idB) ? rankMap.get(idB) : Infinity;
+        if (rankA !== rankB) return rankA - rankB;
+
+        const catA = String(a.category?._id || a.categoryId?._id || a.categoryId || '');
+        const catB = String(b.category?._id || b.categoryId?._id || b.categoryId || '');
+        const prefA = prefSet.has(catA) ? 1 : 0;
+        const prefB = prefSet.has(catB) ? 1 : 0;
+        if (prefB !== prefA) return prefB - prefA;
+
+        const scoreA = (a.rating || 0) + (a.originalPrice > a.price ? 0.4 : 0);
+        const scoreB = (b.rating || 0) + (b.originalPrice > b.price ? 0.4 : 0);
+        return scoreB - scoreA;
+      });
+    } else if (sortBy === 'price-asc') {
       list.sort((a, b) => (a.price || 0) - (b.price || 0));
     } else if (sortBy === 'price-desc') {
       list.sort((a, b) => (b.price || 0) - (a.price || 0));
@@ -502,6 +560,8 @@ const Shop = () => {
     onSaleOnly,
     minRating,
     sortBy,
+    user,
+    recommendedIds,
   ]);
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
@@ -867,6 +927,7 @@ const Shop = () => {
               aria-label="Sort products"
               className="shop-sort-select"
             >
+              {user && <option value="recommended">Sort: Recommended</option>}
               <option value="featured">Sort: Featured</option>
               <option value="price-asc">Price: Low to High</option>
               <option value="price-desc">Price: High to Low</option>
