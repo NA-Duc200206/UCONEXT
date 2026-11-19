@@ -159,21 +159,8 @@ const MyOrders = () => {
   if (orders.length === 0) {
     return (
       <div className="orders-page-container" style={{ textAlign: 'center', paddingTop: '80px', paddingBottom: '80px' }}>
-        <div
-          style={{
-            width: '84px',
-            height: '84px',
-            borderRadius: '50%',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--glass-border)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--brand)',
-            marginBottom: '24px',
-          }}
-        >
-          <Package size={36} />
+        <div className="ui-empty-icon">
+          <Package size={26} strokeWidth={1.6} />
         </div>
         <h2 style={{ fontSize: '24px', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: '700' }}>
           You have no orders yet

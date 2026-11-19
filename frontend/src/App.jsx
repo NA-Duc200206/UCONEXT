@@ -80,6 +80,7 @@ const AppContent = () => {
             <Route path="/orders" element={<MyOrders />} />
             <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/profile" element={<Settings />} />
             
             {/* Admin Routes */}
             <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboard /></RouteGuard>} />

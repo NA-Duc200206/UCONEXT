@@ -98,7 +98,7 @@ const AdminUsers = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Users size={28} color="var(--brand)" /> Customer & Staff Management
+              <span className="ui-icon-box-lg"><Users size={20} strokeWidth={1.75} /></span> Customer & Staff Management
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
               View registered users, assign roles, and inspect account activity ({users.length} total users).
@@ -159,7 +159,9 @@ const AdminUsers = () => {
         </div>
       ) : filteredUsers.length === 0 ? (
         <div className="admin-surface" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-          <Users size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+          <div className="ui-empty-icon">
+            <Users size={26} strokeWidth={1.6} />
+          </div>
           <p style={{ fontSize: '16px', fontWeight: '500' }}>No users match the search filter.</p>
         </div>
       ) : (

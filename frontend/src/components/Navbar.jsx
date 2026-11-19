@@ -7,7 +7,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { api } from '../services/api';
 import { 
   ShoppingBag, User, LogOut, LayoutDashboard, Sun, Moon, 
-  Search, Bell, Heart, Menu, X, ChevronRight, ChevronDown, ArrowUpRight, PackageOpen, 
+  Search, Bell, Heart, Menu, X, ChevronRight, ChevronDown, ArrowUpRight, Package, 
   Settings, Trash2, Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -275,7 +275,7 @@ const Navbar = () => {
                   <h4 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', margin: 0, lineHeight: '1.25' }}>
                     {cat.title}
                   </h4>
-                  <ArrowUpRight size={13} color="#2454F4" style={{ flexShrink: 0 }} />
+                  <ArrowUpRight size={14} strokeWidth={1.75} color="var(--text-muted)" style={{ flexShrink: 0 }} />
                 </div>
               </Link>
             ))}
@@ -457,51 +457,6 @@ const Navbar = () => {
               </Link>
             </div>
           )}
-        </div>
-      );
-    } else if (type === 'user') {
-      content = (
-        <div style={{ width: '230px', padding: '10px' }}>
-          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--glass-border)', marginBottom: '6px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)', margin: '0 0 2px 0' }}>{user.name}</h4>
-            <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, wordBreak: 'break-all' }}>{user.email}</p>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <Link to="/settings" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: '8px', fontSize: '13px' }}>
-              <Settings size={15}/> Account Settings
-            </Link>
-            <Link to="/orders" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: '8px', fontSize: '13px' }}>
-              <PackageOpen size={15}/> My Orders
-            </Link>
-            <Link to="/wishlist" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: '8px', fontSize: '13px' }}>
-              <Heart size={15}/> My Wishlist
-            </Link>
-            {isAdmin && (
-              <Link to="/admin" onClick={() => setActiveDropdown(null)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', color: '#2454F4', textDecoration: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '13px' }}>
-                <Shield size={15}/> Admin Dashboard
-              </Link>
-            )}
-            <button 
-              onClick={() => { setActiveDropdown(null); handleLogout(); }} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '10px', 
-                padding: '9px 10px', 
-                color: 'var(--color-error)', 
-                background: 'transparent', 
-                border: 'none', 
-                cursor: 'pointer', 
-                borderRadius: '8px', 
-                width: '100%', 
-                textAlign: 'left', 
-                fontSize: '13px',
-                fontWeight: '600'
-              }}
-            >
-              <LogOut size={15}/> Sign Out
-            </button>
-          </div>
         </div>
       );
     }
@@ -885,8 +840,11 @@ const Navbar = () => {
 
           {/* User Auth Info / Buttons */}
           {user ? (
-            <div style={{ position: 'relative', marginLeft: '4px' }} onMouseEnter={() => setActiveDropdown('user')} onMouseLeave={() => setActiveDropdown(null)}>
-              <div style={{
+            <Link
+              to="/settings"
+              title="Personal Account"
+              style={{
+                marginLeft: '4px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -894,28 +852,39 @@ const Navbar = () => {
                 background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.04)',
                 border: '1px solid var(--glass-border)',
                 borderRadius: '999px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                textDecoration: 'none'
+              }}
+            >
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: '#2454F4',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: '800',
+                fontSize: '12px',
+                flexShrink: 0
               }}>
-                <div style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: '#2454F4',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: '800',
-                  fontSize: '12px'
-                }}>
-                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
-                </div>
-                <span className="desktop-nav" style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {user.name}
-                </span>
+                {user.avatar ? (
+                  <img
+                    src={getSafeImageUrl(user.avatar)}
+                    alt={user.name || 'User'}
+                    onError={handleImageError}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                ) : (
+                  user.name ? user.name.charAt(0).toUpperCase() : 'U'
+                )}
               </div>
-              {renderDropdown('user')}
-            </div>
+              <span className="desktop-nav" style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.name}
+              </span>
+            </Link>
           ) : (
             <div className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '6px' }}>
               <Link 
@@ -1113,14 +1082,62 @@ const Navbar = () => {
                     </Link>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ padding: '10px', background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: '10px' }}>
-                      <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>{user.name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{user.email}</div>
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <Link
+                      to="/settings"
+                      onClick={() => setMobileOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px',
+                        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                        borderRadius: '10px',
+                        textDecoration: 'none'
+                      }}
+                    >
+                      <div style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        background: '#2454F4',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: '800',
+                        fontSize: '13px',
+                        flexShrink: 0
+                      }}>
+                        {user.avatar ? (
+                          <img
+                            src={getSafeImageUrl(user.avatar)}
+                            alt={user.name || 'User'}
+                            onError={handleImageError}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                        ) : (
+                          user.name ? user.name.charAt(0).toUpperCase() : 'U'
+                        )}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>{user.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
+                      </div>
+                    </Link>
+                    <Link to="/settings" onClick={() => setMobileOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+                      <Settings size={15} /> Account & Preferences
+                    </Link>
+                    <Link to="/orders" onClick={() => setMobileOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+                      <Package size={15} strokeWidth={1.75} /> My Orders
+                    </Link>
+                    <Link to="/wishlist" onClick={() => setMobileOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+                      <Heart size={15} /> My Wishlist
+                    </Link>
                     {isAdmin && (
-                      <Link to="/admin" onClick={() => setMobileOpen(false)} style={{ padding: '10px', color: '#2454F4', textDecoration: 'none', fontWeight: '700', fontSize: '14px' }}>
-                        Admin Dashboard
+                      <Link to="/admin" onClick={() => setMobileOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', color: '#2454F4', textDecoration: 'none', fontWeight: '700', fontSize: '14px' }}>
+                        <Shield size={15} /> Admin Dashboard
                       </Link>
                     )}
                     <button 
