@@ -17,7 +17,7 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
 
     jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026', async (err: any, decoded: any) => {
       if (err) {
-        return res.status(403).json({ message: 'Authentication token is invalid or expired.' });
+        return res.status(401).json({ message: 'Authentication token is invalid or expired.' });
       }
 
       const user = await User.findById(decoded.id);

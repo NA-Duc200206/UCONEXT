@@ -22,6 +22,7 @@ import Cart from './pages/Cart';
 import PaymentResult from './pages/PaymentResult';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ResetPassword from './pages/ResetPassword';
 import MyOrders from './pages/MyOrders';
 import Wishlist from './pages/Wishlist';
 import AdminDashboard from './pages/AdminDashboard';
@@ -35,7 +36,10 @@ import NotFound from './pages/NotFound';
 const AppContent = () => {
   const location = useLocation();
   const isAdminPage = location.pathname.startsWith('/admin');
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+  const isAuthPage =
+    location.pathname === '/login' ||
+    location.pathname === '/register' ||
+    location.pathname === '/reset-password';
   const isHomePage = location.pathname === '/';
 
   // Smooth scroll to top on every page change and disable browser scroll restoration
@@ -77,6 +81,7 @@ const AppContent = () => {
             <Route path="/payment-result" element={<PaymentResult />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/orders" element={<MyOrders />} />
             <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/settings" element={<Settings />} />

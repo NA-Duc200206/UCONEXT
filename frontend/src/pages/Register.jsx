@@ -14,6 +14,7 @@ import GlowLogo from '../components/GlowLogo';
 import AuthLayout from '../components/auth/AuthLayout';
 import AuthBrandPanel from '../components/auth/AuthBrandPanel';
 import AuthInput from '../components/auth/AuthInput';
+import { signInWithGooglePopup } from '../utils/firebaseAuth';
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -112,7 +113,7 @@ const PasswordStrength = ({ password }) => {
 };
 
 const Register = () => {
-  const { register } = useAuth();
+  const { register, loginWithFirebase } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -186,8 +187,21 @@ const Register = () => {
     }
   };
 
-  const handleGoogleAuth = () => {
-    setAuthError('Google account registration is enabled via corporate SSO. Please sign up with your email.');
+  const handleGoogleAuth = async () => {
+    setAuthError('');
+    setSubmitting(true);
+    try {
+      const idToken = await signInWithGooglePopup();
+      const user = await loginWithFirebase(idToken);
+      if (user.role === 'admin') {
+        navigate(redirectTarget !== '/' ? redirectTarget : '/admin');
+      } else {
+        navigate(redirectTarget);
+      }
+    } catch (error) {
+      setAuthError(error.message || 'Google Sign-In failed. Please try again.');
+      setSubmitting(false);
+    }
   };
 
   const isFormValid =

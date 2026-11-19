@@ -15,6 +15,8 @@ import GlowLogo from '../components/GlowLogo';
 import AuthLayout from '../components/auth/AuthLayout';
 import AuthBrandPanel from '../components/auth/AuthBrandPanel';
 import AuthInput from '../components/auth/AuthInput';
+import { api } from '../services/api';
+import { signInWithGooglePopup } from '../utils/firebaseAuth';
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -38,7 +40,7 @@ const GoogleIcon = () => (
 );
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, loginWithFirebase } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -114,11 +116,24 @@ const Login = () => {
     }
   };
 
-  const handleGoogleAuth = () => {
-    setAuthError('Google Sign-In is configured via corporate SSO. Please sign in with your email and password.');
+  const handleGoogleAuth = async () => {
+    setAuthError('');
+    setSubmitting(true);
+    try {
+      const idToken = await signInWithGooglePopup();
+      const user = await loginWithFirebase(idToken);
+      if (user.role === 'admin') {
+        navigate(redirectTarget !== '/' ? redirectTarget : '/admin');
+      } else {
+        navigate(redirectTarget);
+      }
+    } catch (error) {
+      setAuthError(error.message || 'Google Sign-In failed. Please try again.');
+      setSubmitting(false);
+    }
   };
 
-  const handleForgotSubmit = (e) => {
+  const handleForgotSubmit = async (e) => {
     e.preventDefault();
     setForgotFeedback('');
     if (!forgotEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgotEmail)) {
@@ -127,10 +142,14 @@ const Login = () => {
     }
 
     setForgotLoading(true);
-    setTimeout(() => {
-      setForgotLoading(false);
+    try {
+      await api.auth.forgotPassword(forgotEmail.trim());
       setForgotSent(true);
-    }, 700);
+    } catch (error) {
+      setForgotFeedback(error.message || 'Unable to send reset instructions. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
