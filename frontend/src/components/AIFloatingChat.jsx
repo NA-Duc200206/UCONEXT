@@ -103,9 +103,42 @@ const AIFloatingChat = () => {
   const [addedProdIds, setAddedProdIds] = useState({});
   const [copiedCode, setCopiedCode] = useState(null);
 
+  const drawerRef = useRef(null);
+  const threadRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messagesRef = useRef(messages);
   const timersRef = useRef([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const drawerEl = drawerRef.current;
+    if (!drawerEl) return;
+
+    const handleWheel = (e) => {
+      const threadEl = threadRef.current;
+      if (!threadEl || !threadEl.contains(e.target)) {
+        e.preventDefault();
+        return;
+      }
+
+      const canScroll = threadEl.scrollHeight > threadEl.clientHeight;
+      if (!canScroll) {
+        e.preventDefault();
+        return;
+      }
+
+      const atTop = threadEl.scrollTop <= 0 && e.deltaY < 0;
+      const atBottom =
+        threadEl.scrollTop + threadEl.clientHeight >= threadEl.scrollHeight - 1 && e.deltaY > 0;
+
+      if (atTop || atBottom) {
+        e.preventDefault();
+      }
+    };
+
+    drawerEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => drawerEl.removeEventListener('wheel', handleWheel);
+  }, [isOpen]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -408,6 +441,7 @@ const AIFloatingChat = () => {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            ref={drawerRef}
             initial={{ opacity: 0, y: 18, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.97 }}
@@ -497,7 +531,7 @@ const AIFloatingChat = () => {
             )}
 
             {/* Messages Thread */}
-            <div className="uc-chat-thread">
+            <div ref={threadRef} className="uc-chat-thread">
               {messages.map((msg) => {
                 if (msg.sender === 'user') {
                   return (
@@ -843,6 +877,7 @@ const chatStyles = `
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    overscroll-behavior: contain;
     transition: width 180ms ease-out, height 180ms ease-out;
   }
 
@@ -1001,8 +1036,11 @@ const chatStyles = `
 
   .uc-chat-thread {
     flex: 1;
+    min-height: 0;
     padding: 16px;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     display: flex;
     flex-direction: column;
     gap: 14px;
