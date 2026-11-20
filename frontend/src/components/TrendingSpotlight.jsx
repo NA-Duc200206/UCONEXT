@@ -304,19 +304,19 @@ const TrendingSpotlight = ({ products = [] }) => {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: all 0.18s ease;
+          transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
           flex-shrink: 0;
         }
 
         .ts-card-add:hover {
-          background: #2454F4;
-          border-color: #2454F4;
+          background: var(--brand);
+          border-color: var(--brand);
           color: #ffffff;
         }
 
         .ts-card-add.added {
-          background: #10b981;
-          border-color: #10b981;
+          background: var(--color-success);
+          border-color: var(--color-success);
           color: #ffffff;
         }
 

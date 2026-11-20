@@ -450,7 +450,7 @@ const Login = () => {
           justifyContent: 'center',
           gap: '10px',
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.backgroundColor = isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(15, 23, 42, 0.03)';

@@ -190,7 +190,7 @@ const ShopProductCard = ({ product }) => {
             justifyContent: 'center',
             cursor: 'pointer',
             opacity: isHovered || wishlisted ? 1 : 0.85,
-            transition: 'all 0.2s ease',
+            transition: 'opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease',
             zIndex: 3,
           }}
         >
@@ -204,7 +204,7 @@ const ShopProductCard = ({ product }) => {
               right: '8px',
               background: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.94)',
               color: 'var(--text-secondary)',
-              fontSize: '10px',
+              fontSize: '11px',
               fontWeight: '700',
               padding: '3px 7px',
               borderRadius: '5px',
@@ -223,7 +223,7 @@ const ShopProductCard = ({ product }) => {
           fontWeight: '700',
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: '#2454F4',
+          color: 'var(--brand)',
           marginBottom: '4px',
         }}
       >
@@ -319,7 +319,7 @@ const ShopProductCard = ({ product }) => {
               fontSize: '11.5px',
               fontWeight: '700',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease',
               transform: isAdded ? 'scale(1.06)' : 'scale(1)',
               flexShrink: 0,
             }}

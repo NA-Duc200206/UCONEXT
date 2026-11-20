@@ -3,7 +3,7 @@ import React from 'react';
 // Single Product Card Skeleton
 export const ProductCardSkeleton = () => {
   return (
-    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', padding: '16px' }}>
+    <div className="uconext-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', padding: '16px' }}>
       <div className="skeleton skeleton-image" style={{ paddingTop: '100%', width: '100%', marginBottom: '14px' }}></div>
       <div className="skeleton" style={{ height: '18px', width: '30%', marginBottom: '10px' }}></div>
       <div className="skeleton skeleton-text" style={{ height: '18px', width: '90%', marginBottom: '8px' }}></div>
@@ -67,18 +67,18 @@ export const DashboardSkeleton = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
         {Array.from({ length: 4 }).map((_, idx) => (
-          <div key={idx} className="glass-card" style={{ height: '120px' }}>
+          <div key={idx} className="uconext-card" style={{ height: '120px' }}>
             <div className="skeleton" style={{ height: '16px', width: '50%', marginBottom: '12px' }}></div>
             <div className="skeleton" style={{ height: '32px', width: '80%' }}></div>
           </div>
         ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px' }}>
-        <div className="glass-card" style={{ height: '350px' }}>
+        <div className="uconext-card" style={{ height: '350px' }}>
           <div className="skeleton" style={{ height: '24px', width: '30%', marginBottom: '24px' }}></div>
           <div className="skeleton" style={{ height: '240px', width: '100%' }}></div>
         </div>
-        <div className="glass-card" style={{ height: '350px' }}>
+        <div className="uconext-card" style={{ height: '350px' }}>
           <div className="skeleton" style={{ height: '24px', width: '50%', marginBottom: '24px' }}></div>
           <div className="skeleton" style={{ height: '240px', width: '100%' }}></div>
         </div>
