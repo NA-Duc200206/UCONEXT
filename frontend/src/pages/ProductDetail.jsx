@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
 import { ProductDetailSkeleton } from '../components/SkeletonLoader';
 import ProductCard from '../components/ProductCard';
+import AIProductInsights from '../components/AIProductInsights';
 import {
   formatVND,
   translateCategoryName,
@@ -626,6 +627,12 @@ const ProductDetail = () => {
           <div className="pd-tab-panel">
             {activeTab === 'reviews' ? (
               <div className="pd-reviews-wrap">
+                <AIProductInsights
+                  productId={product._id || product.id}
+                  productName={product.name}
+                  reviewCount={totalReviews}
+                />
+
                 {/* Write Review Form */}
                 <div className="pd-review-form-box">
                   <h3 className="pd-review-form-title">Write a Customer Review</h3>

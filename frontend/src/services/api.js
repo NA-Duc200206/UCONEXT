@@ -92,7 +92,12 @@ async function request(endpoint, { method = 'GET', body = null, token = null, _r
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'An unexpected error occurred.');
+      const err = new Error(data.message || 'An unexpected error occurred.');
+      err.status = response.status;
+      err.code = data.code;
+      err.provider = data.provider;
+      err.model = data.model;
+      throw err;
     }
 
     return data;
@@ -232,6 +237,18 @@ export const api = {
 
   // AI Assistant
   ai: {
-    chat: (message) => request('/ai/chat', { method: 'POST', body: { message } }),
+    getStatus: () => request('/ai/status'),
+    chat: (message, options = {}) =>
+      request('/ai/chat', {
+        method: 'POST',
+        body: {
+          message,
+          ...(options.history ? { history: options.history } : {}),
+          ...(options.context ? { context: options.context } : {}),
+        },
+      }),
+    getHistory: () => request('/ai/history'),
+    clearHistory: () => request('/ai/history', { method: 'DELETE' }),
+    getProductSummary: (productId) => request(`/ai/products/${productId}/summary`),
   }
 };
