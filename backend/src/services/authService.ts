@@ -5,17 +5,16 @@ import mongoose from 'mongoose';
 import { User, AuditLog, Category, Product } from '../models';
 import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
-import { User, AuditLog } from '../models';
 import { emailService } from './emailService';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const PHONE_REGEX = /^[0-9+\-\s()]{8,20}$/;
 
-
 function createHttpError(message: string, statusCode: number) {
   const error: any = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
 
 function getFirebaseAdminAuth() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -48,7 +47,6 @@ function mapFirebaseProvider(
   }
 }
 
-const BCRYPT_SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MINUTES = 15;
 const MAX_REFRESH_SESSIONS = 5;
 
@@ -547,6 +545,8 @@ export const authService = {
   async clearRecentlyViewed(userId: string) {
     await User.findByIdAndUpdate(userId, { $set: { recentlyViewed: [] } });
     return [];
+  },
+
   async refreshSession(rawRefreshToken: string) {
     if (!rawRefreshToken || typeof rawRefreshToken !== 'string') {
       const error: any = new Error('Refresh token is required.');
