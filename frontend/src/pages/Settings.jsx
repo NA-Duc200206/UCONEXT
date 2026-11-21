@@ -1493,8 +1493,11 @@ const Settings = () => {
           transition: border-color 0.15s ease;
         }
 
-        .settings-input:focus {
+        .settings-input:focus,
+        .settings-input:focus-visible {
+          outline: none;
           border-color: var(--brand);
+          box-shadow: 0 0 0 3px rgba(36, 84, 244, 0.14);
         }
 
         .settings-btn-primary {

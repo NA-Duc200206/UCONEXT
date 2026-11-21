@@ -1442,8 +1442,11 @@ const pageStyles = `
     font-family: inherit;
   }
 
-  .pd-textarea:focus {
-    border-color: #2454F4;
+  .pd-textarea:focus,
+  .pd-textarea:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(36, 84, 244, 0.14);
   }
 
   .pd-form-submit-row {
