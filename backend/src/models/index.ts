@@ -5,3 +5,4 @@ export * from './Order';
 export * from './Coupon';
 export * from './AuditLog';
 export * from './Review';
+export * from './AIChatSession';

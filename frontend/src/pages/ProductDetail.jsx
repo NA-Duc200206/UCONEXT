@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
 import { ProductDetailSkeleton } from '../components/SkeletonLoader';
 import ProductCard from '../components/ProductCard';
+import AIProductInsights from '../components/AIProductInsights';
 import {
   formatVND,
   translateCategoryName,
@@ -137,7 +138,7 @@ const ProductDetail = () => {
           };
           localStorage.setItem(
             'uconext_recently_viewed',
-            JSON.stringify([snapshot, ...previousOthers].slice(0, 8))
+            JSON.stringify([snapshot, ...previousOthers].slice(0, 16))
           );
         } catch {
           // Ignore storage quota or JSON parse errors
@@ -166,6 +167,49 @@ const ProductDetail = () => {
 
     fetchProduct();
   }, [id, navigate]);
+
+  // Sync Recently Viewed with user account across devices/sessions
+  useEffect(() => {
+    const currentId = product?._id || product?.id;
+    const userId = user?._id || user?.id;
+    if (!userId || !currentId) return;
+
+    let cancelled = false;
+    const syncRecentlyViewed = async () => {
+      try {
+        let res;
+        try {
+          res = await api.auth.addRecentlyViewed(currentId);
+        } catch {
+          res = await api.auth.getRecentlyViewed();
+        }
+        if (cancelled) return;
+
+        const syncedList = Array.isArray(res?.products) ? res.products : [];
+        if (syncedList.length > 0) {
+          const others = syncedList.filter(
+            (item) => String(item._id || item.id) !== String(currentId)
+          );
+          setRecentlyViewed(others.slice(0, 4));
+          try {
+            localStorage.setItem(
+              'uconext_recently_viewed',
+              JSON.stringify(syncedList.slice(0, 16))
+            );
+          } catch {
+            // Ignore localStorage quota errors
+          }
+        }
+      } catch {
+        // Keep localStorage recentlyViewed fallback silently
+      }
+    };
+
+    syncRecentlyViewed();
+    return () => {
+      cancelled = true;
+    };
+  }, [product?._id, product?.id, user?._id, user?.id]);
 
   const fetchReviews = async () => {
     try {
@@ -524,7 +568,7 @@ const ProductDetail = () => {
                       cursor: 'pointer',
                       fontWeight: '700',
                       fontSize: '13.5px',
-                      transition: 'all 0.2s ease',
+                      transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
                     }}
                   >
                     <Heart
@@ -583,6 +627,12 @@ const ProductDetail = () => {
           <div className="pd-tab-panel">
             {activeTab === 'reviews' ? (
               <div className="pd-reviews-wrap">
+                <AIProductInsights
+                  productId={product._id || product.id}
+                  productName={product.name}
+                  reviewCount={totalReviews}
+                />
+
                 {/* Write Review Form */}
                 <div className="pd-review-form-box">
                   <h3 className="pd-review-form-title">Write a Customer Review</h3>
@@ -666,7 +716,9 @@ const ProductDetail = () => {
                 {/* Reviews List */}
                 {reviews.length === 0 ? (
                   <div className="pd-empty-reviews">
-                    <MessageSquare size={36} style={{ margin: '0 auto 12px auto', opacity: 0.45 }} />
+                    <div className="ui-empty-icon">
+                      <MessageSquare size={24} strokeWidth={1.6} />
+                    </div>
                     <p style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>
                       No reviews yet for this product.
                     </p>
@@ -1085,17 +1137,17 @@ const pageStyles = `
     background: var(--bg-secondary);
     color: var(--text-secondary);
     border: 1px solid var(--glass-border);
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
 
   .pd-variant-btn:hover {
-    border-color: #2454F4;
+    border-color: var(--brand);
     color: var(--text-primary);
   }
 
   .pd-variant-btn.active {
-    background: #2454F4;
-    border-color: #2454F4;
+    background: var(--brand);
+    border-color: var(--brand);
     color: #ffffff;
   }
 
@@ -1390,8 +1442,11 @@ const pageStyles = `
     font-family: inherit;
   }
 
-  .pd-textarea:focus {
-    border-color: #2454F4;
+  .pd-textarea:focus,
+  .pd-textarea:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(36, 84, 244, 0.14);
   }
 
   .pd-form-submit-row {

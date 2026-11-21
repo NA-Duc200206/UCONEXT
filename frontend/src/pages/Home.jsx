@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useToast } from '../context/ToastContext';
 import FeaturedProductShowcase from '../components/FeaturedProductShowcase';
 import TrendingSpotlight from '../components/TrendingSpotlight';
 import { ProductListSkeleton } from '../components/SkeletonLoader';
@@ -16,6 +18,8 @@ import {
   ShoppingCart,
   Check,
   Heart,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   formatVND,
@@ -256,7 +260,7 @@ const HomeProductCard = ({ product }) => {
             justifyContent: 'center',
             cursor: 'pointer',
             opacity: isHovered || wishlisted ? 1 : 0.85,
-            transition: 'all 0.2s ease',
+            transition: 'opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease',
             zIndex: 3,
           }}
         >
@@ -270,7 +274,7 @@ const HomeProductCard = ({ product }) => {
               right: '10px',
               background: 'rgba(15, 23, 42, 0.85)',
               color: '#f87171',
-              fontSize: '10.5px',
+              fontSize: '11px',
               fontWeight: '700',
               padding: '3px 8px',
               borderRadius: '5px',
@@ -304,11 +308,11 @@ const HomeProductCard = ({ product }) => {
       {product.category?.name && (
         <span
           style={{
-            fontSize: '10.5px',
+            fontSize: '11px',
             fontWeight: '700',
             letterSpacing: '0.07em',
             textTransform: 'uppercase',
-            color: '#2454F4',
+            color: 'var(--brand)',
             marginBottom: '4px',
           }}
         >
@@ -380,7 +384,7 @@ const HomeProductCard = ({ product }) => {
               fontSize: '11.5px',
               fontWeight: '700',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease',
               transform: isAdded ? 'scale(1.06)' : 'scale(1)',
               flexShrink: 0,
             }}
@@ -459,9 +463,28 @@ const TrustBenefitsSection = () => {
 
 const Home = () => {
   const { isDark } = useTheme();
+  const { user, updateUser } = useAuth();
+  const { showToast } = useToast();
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Personalized recommendations state
+  const [recommendedRaw, setRecommendedRaw] = useState([]);
+  const [isPersonalizedRecs, setIsPersonalizedRecs] = useState(false);
+  const [matchedRecCategories, setMatchedRecCategories] = useState([]);
+  const [loadingRecs, setLoadingRecs] = useState(true);
+
+  // Quick onboarding preferences banner (for logged-in users without preferred categories)
+  const [quickPrefIds, setQuickPrefIds] = useState([]);
+  const [savingQuickPrefs, setSavingQuickPrefs] = useState(false);
+  const [dismissedPrefPrompt, setDismissedPrefPrompt] = useState(false);
+  const [quickPrefError, setQuickPrefError] = useState('');
+
+  // Recently Viewed section state
+  const [recentlyViewed, setRecentlyViewed] = useState([]);
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   // Catalog state for "Explore All Products"
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -486,6 +509,127 @@ const Home = () => {
     };
     fetchData();
   }, []);
+
+  const userPrefsKey = JSON.stringify(user?.preferredCategories || []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchRecommended = async () => {
+      setLoadingRecs(true);
+      try {
+        const res = await api.products.getRecommended(24);
+        if (cancelled) return;
+        setRecommendedRaw(res?.products || []);
+        setIsPersonalizedRecs(Boolean(res?.personalized));
+        setMatchedRecCategories(Array.isArray(res?.matchedCategories) ? res.matchedCategories : []);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error fetching recommended products:', error?.message || error);
+        }
+      } finally {
+        if (!cancelled) setLoadingRecs(false);
+      }
+    };
+    fetchRecommended();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?._id, user?.id, userPrefsKey]);
+
+  const readLocalRecentlyViewed = () => {
+    try {
+      const raw = localStorage.getItem('uconext_recently_viewed');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 4) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadRecentlyViewed = async () => {
+      const userId = user?._id || user?.id;
+      if (!userId) {
+        if (!cancelled) setRecentlyViewed(readLocalRecentlyViewed());
+        return;
+      }
+      try {
+        const res = await api.auth.getRecentlyViewed();
+        if (!cancelled) {
+          setRecentlyViewed(Array.isArray(res?.products) ? res.products.slice(0, 4) : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setRecentlyViewed(readLocalRecentlyViewed());
+        }
+      }
+    };
+    loadRecentlyViewed();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?._id, user?.id]);
+
+  const handleToggleQuickPref = (catId) => {
+    setQuickPrefError('');
+    const idStr = String(catId);
+    setQuickPrefIds((prev) => {
+      if (prev.includes(idStr)) return prev.filter((id) => id !== idStr);
+      if (prev.length >= 5) {
+        setQuickPrefError('You can select up to 5 favorite categories.');
+        return prev;
+      }
+      return [...prev, idStr];
+    });
+  };
+
+  const handleSaveQuickPrefs = async () => {
+    if (quickPrefIds.length === 0) {
+      setQuickPrefError('Please select at least 1 category.');
+      return;
+    }
+    setQuickPrefError('');
+    setSavingQuickPrefs(true);
+    try {
+      const res = await api.auth.updatePreferences(quickPrefIds);
+      if (res?.user) updateUser(res.user);
+      setQuickPrefIds([]);
+      showToast('Shopping preferences saved.', 'success');
+    } catch (err) {
+      setQuickPrefError(err.message || 'Failed to save preferences.');
+    } finally {
+      setSavingQuickPrefs(false);
+    }
+  };
+
+  const handleConfirmClearHistory = async () => {
+    setClearingHistory(true);
+    try {
+      if (user?._id || user?.id) {
+        await api.auth.clearRecentlyViewed();
+      }
+      try {
+        localStorage.removeItem('uconext_recently_viewed');
+      } catch {
+        // Ignore storage errors
+      }
+      setRecentlyViewed([]);
+      setConfirmClearHistory(false);
+      showToast('Recently viewed history cleared.', 'info');
+    } catch (err) {
+      showToast(err.message || 'Failed to clear history.', 'error');
+    } finally {
+      setClearingHistory(false);
+    }
+  };
+
+  const showQuickPrefBanner = Boolean(
+    user &&
+      !dismissedPrefPrompt &&
+      (!Array.isArray(user.preferredCategories) || user.preferredCategories.length === 0) &&
+      categories.length > 0
+  );
 
   // Featured products for the top animated showcase (12 diverse items with unique images)
   const featuredProducts = useMemo(() => {
@@ -561,6 +705,47 @@ const Home = () => {
     return result;
   }, [products, featuredProducts]);
 
+  // Recommended For You products (up to 8 diverse items avoiding Featured & Trending duplicates)
+  const recommendedProducts = useMemo(() => {
+    if (!recommendedRaw.length) return [];
+    const usedIds = new Set([
+      ...featuredProducts.map((p) => String(p._id || p.id)),
+      ...trendingProducts.map((p) => String(p._id || p.id)),
+    ]);
+    const usedImages = new Set([
+      ...featuredProducts.map((p) => p.image).filter(Boolean),
+      ...trendingProducts.map((p) => p.image).filter(Boolean),
+    ]);
+
+    const picked = [];
+    const pickedIds = new Set();
+    const pickedImages = new Set();
+
+    for (const p of recommendedRaw) {
+      if (picked.length >= 8) break;
+      const pid = String(p._id || p.id);
+      const img = p.image;
+      if (!usedIds.has(pid) && (!img || (!usedImages.has(img) && !pickedImages.has(img)))) {
+        pickedIds.add(pid);
+        if (img) pickedImages.add(img);
+        picked.push(p);
+      }
+    }
+
+    if (picked.length < 4) {
+      for (const p of recommendedRaw) {
+        if (picked.length >= 8) break;
+        const pid = String(p._id || p.id);
+        if (!usedIds.has(pid) && !pickedIds.has(pid)) {
+          pickedIds.add(pid);
+          picked.push(p);
+        }
+      }
+    }
+
+    return picked;
+  }, [recommendedRaw, featuredProducts, trendingProducts]);
+
   // Filtered & sorted catalog products (prioritizing unseen items & unique images on default view)
   const catalogProducts = useMemo(() => {
     const filtered = products.filter((p) => {
@@ -582,10 +767,12 @@ const Home = () => {
       const usedIds = new Set([
         ...featuredProducts.map((p) => String(p._id || p.id)),
         ...trendingProducts.map((p) => String(p._id || p.id)),
+        ...recommendedProducts.map((p) => String(p._id || p.id)),
       ]);
       const seenImages = new Set([
         ...featuredProducts.map((p) => p.image).filter(Boolean),
         ...trendingProducts.map((p) => p.image).filter(Boolean),
+        ...recommendedProducts.map((p) => p.image).filter(Boolean),
       ]);
       const distinctFresh = [];
       const fallbackRest = [];
@@ -601,7 +788,7 @@ const Home = () => {
       return [...distinctFresh, ...fallbackRest];
     }
     return sorted;
-  }, [products, selectedCategory, sortBy, featuredProducts, trendingProducts]);
+  }, [products, selectedCategory, sortBy, featuredProducts, trendingProducts, recommendedProducts]);
 
   const catTrackRef = useRef(null);
   const [canScrollCatLeft, setCanScrollCatLeft] = useState(false);
@@ -922,6 +1109,380 @@ const Home = () => {
         )}
       </section>
 
+      {/* 3.5. Recommended For You */}
+      {(loadingRecs || recommendedProducts.length > 0) && (
+        <section
+          id="recommended"
+          className="home-section-pad"
+          style={{
+            padding: '48px 48px 24px 48px',
+            maxWidth: '1560px',
+            margin: '0 auto',
+            position: 'relative',
+            zIndex: 2,
+          }}
+        >
+          <ScrollReveal direction="up">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-end',
+                marginBottom: '20px',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    color: '#2454F4',
+                    marginBottom: '6px',
+                  }}
+                >
+                  {isPersonalizedRecs ? 'Personalized For You' : 'Top Rated Picks'}
+                </span>
+                <h2
+                  style={{
+                    fontSize: 'clamp(22px, 2.2vw, 26px)',
+                    fontWeight: '700',
+                    color: isDark ? '#f8fafc' : '#0b132b',
+                    letterSpacing: '-0.025em',
+                    margin: 0,
+                    lineHeight: '1.2',
+                    fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+                  }}
+                >
+                  Recommended For You
+                </h2>
+                {isPersonalizedRecs && matchedRecCategories.length > 0 && (
+                  <p
+                    style={{
+                      fontSize: '13px',
+                      color: 'var(--text-muted)',
+                      margin: '6px 0 0 0',
+                    }}
+                  >
+                    Tailored from {matchedRecCategories.map(translateCategoryName).join(', ')}
+                  </p>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                {user ? (
+                  <>
+                    <Link
+                      to="/settings"
+                      style={{
+                        color: 'var(--text-secondary)',
+                        textDecoration: 'none',
+                        fontWeight: '600',
+                        fontSize: '13.5px',
+                      }}
+                    >
+                      Preferences
+                    </Link>
+                    <Link
+                      to="/products?sort=recommended"
+                      style={{
+                        color: '#2454F4',
+                        textDecoration: 'none',
+                        fontWeight: '600',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '13.5px',
+                      }}
+                    >
+                      <span>See All</span>
+                      <ArrowRight size={14} />
+                    </Link>
+                  </>
+                ) : (
+                  <Link
+                    to="/products"
+                    style={{
+                      color: '#2454F4',
+                      textDecoration: 'none',
+                      fontWeight: '600',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '13.5px',
+                    }}
+                  >
+                    <span>View Collection</span>
+                    <ArrowRight size={14} />
+                  </Link>
+                )}
+              </div>
+            </div>
+          </ScrollReveal>
+
+          {showQuickPrefBanner && (
+            <div
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '14px',
+                padding: '18px 20px',
+                marginBottom: '22px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  marginBottom: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="ui-icon-box">
+                    <SlidersHorizontal size={17} strokeWidth={1.75} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14.5px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                      Personalize your feed
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Pick up to 5 categories you shop most to tailor recommendations and AI tips.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDismissedPrefPrompt(true)}
+                  aria-label="Dismiss interest picker"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <X size={16} strokeWidth={1.75} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                {categories.map((cat) => {
+                  const catId = String(cat._id || cat.id);
+                  const isSelected = quickPrefIds.includes(catId);
+                  return (
+                    <button
+                      key={catId}
+                      type="button"
+                      onClick={() => handleToggleQuickPref(catId)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 13px',
+                        borderRadius: '999px',
+                        fontSize: '12.5px',
+                        fontWeight: isSelected ? '700' : '600',
+                        border: isSelected
+                          ? `1px solid ${isDark ? 'rgba(96, 165, 250, 0.5)' : '#2454F4'}`
+                          : '1px solid var(--glass-border)',
+                        background: isSelected
+                          ? isDark
+                            ? 'rgba(36, 84, 244, 0.16)'
+                            : 'rgba(36, 84, 244, 0.08)'
+                          : 'var(--bg-elevated)',
+                        color: isSelected
+                          ? isDark
+                            ? '#93c5fd'
+                            : '#2454F4'
+                          : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s ease, color 0.15s ease',
+                      }}
+                    >
+                      {isSelected && <Check size={13} strokeWidth={2.25} />}
+                      <span>{translateCategoryName(cat.name)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {quickPrefError && (
+                <p style={{ fontSize: '12.5px', color: 'var(--color-error)', fontWeight: '600', margin: '0 0 10px 0' }}>
+                  {quickPrefError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                  {quickPrefIds.length} / 5 selected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSaveQuickPrefs}
+                  disabled={savingQuickPrefs || quickPrefIds.length === 0}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '9px',
+                    border: 'none',
+                    background: '#2454F4',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: savingQuickPrefs || quickPrefIds.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: savingQuickPrefs || quickPrefIds.length === 0 ? 0.55 : 1,
+                  }}
+                >
+                  {savingQuickPrefs ? 'Saving...' : 'Save Preferences'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {loadingRecs ? (
+            <ProductListSkeleton count={4} />
+          ) : (
+            <div className="home-products-grid">
+              {recommendedProducts.map((prod) => (
+                <HomeProductCard key={prod._id || prod.id} product={prod} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 3.6. Recently Viewed */}
+      {recentlyViewed.length > 0 && (
+        <section
+          id="recently-viewed"
+          className="home-section-pad"
+          style={{
+            padding: '40px 48px 20px 48px',
+            maxWidth: '1560px',
+            margin: '0 auto',
+            position: 'relative',
+            zIndex: 2,
+          }}
+        >
+          <ScrollReveal direction="up">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-end',
+                marginBottom: '20px',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    color: '#2454F4',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Your History
+                </span>
+                <h2
+                  style={{
+                    fontSize: 'clamp(22px, 2.2vw, 26px)',
+                    fontWeight: '700',
+                    color: isDark ? '#f8fafc' : '#0b132b',
+                    letterSpacing: '-0.025em',
+                    margin: 0,
+                    lineHeight: '1.2',
+                    fontFamily: '"Plus Jakarta Sans", "Inter", sans-serif',
+                  }}
+                >
+                  Recently Viewed
+                </h2>
+              </div>
+
+              {confirmClearHistory ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    disabled={clearingHistory}
+                    onClick={handleConfirmClearHistory}
+                    style={{
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(239, 68, 68, 0.45)',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: 'var(--color-error)',
+                      fontSize: '12.5px',
+                      fontWeight: '700',
+                      cursor: clearingHistory ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {clearingHistory ? 'Clearing...' : 'Confirm'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={clearingHistory}
+                    onClick={() => setConfirmClearHistory(false)}
+                    style={{
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--glass-border)',
+                      background: 'var(--bg-elevated)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '12.5px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearHistory(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--glass-border)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '12.5px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={14} strokeWidth={1.75} />
+                  <span>Clear History</span>
+                </button>
+              )}
+            </div>
+          </ScrollReveal>
+
+          <div className="home-products-grid">
+            {recentlyViewed.map((prod) => (
+              <HomeProductCard key={prod._id || prod.id} product={prod} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* 4. All Products / Product Catalog: "Explore All Products" */}
       <section
         id="catalog"
@@ -1020,9 +1581,9 @@ const Home = () => {
                 border: selectedCategory === 'all' ? '1px solid transparent' : '1px solid var(--glass-border)',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                background: selectedCategory === 'all' ? '#2454F4' : 'transparent',
+                background: selectedCategory === 'all' ? 'var(--brand)' : 'transparent',
                 color: selectedCategory === 'all' ? '#ffffff' : 'var(--text-secondary)',
-                transition: 'all 0.2s ease',
+                transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
               }}
             >
               All Products
@@ -1047,9 +1608,9 @@ const Home = () => {
                     border: isSelected ? '1px solid transparent' : '1px solid var(--glass-border)',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
-                    background: isSelected ? '#2454F4' : 'transparent',
+                    background: isSelected ? 'var(--brand)' : 'transparent',
                     color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
                   }}
                 >
                   {translateCategoryName(cat.name)}

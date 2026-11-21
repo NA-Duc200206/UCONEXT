@@ -121,7 +121,7 @@ const HeroLoggedIn = () => {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
           opacity: 0;
         }
         .cinema-slider-container:hover .slide-nav-btn {
@@ -148,7 +148,7 @@ const HeroLoggedIn = () => {
           border-radius: 3px;
           background: rgba(255, 255, 255, 0.2);
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: width 0.3s ease, background-color 0.3s ease;
         }
         .slide-dot.active {
           background: white;
@@ -239,7 +239,7 @@ const HeroLoggedIn = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                   boxShadow: '0 8px 24px rgba(255,255,255,0.1)',
-                  transition: 'all 0.25s ease'
+                  transition: 'transform 0.25s ease, box-shadow 0.25s ease'
                 }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}

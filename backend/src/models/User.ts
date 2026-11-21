@@ -10,15 +10,38 @@ export interface ICartItem {
   size?: string;
 }
 
+export interface IRecentlyViewedItem {
+  productId: Schema.Types.ObjectId;
+  viewedAt: Date;
+}
+
+export interface ISavedAddress {
+  _id?: Schema.Types.ObjectId;
+  label: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  isDefault: boolean;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
   password?: string;
   role: 'guest' | 'customer' | 'warehouse' | 'support' | 'sales' | 'admin' | 'super_admin';
   avatar?: string;
+  googleId?: string;
+  firebaseUid?: string;
+  phone?: string;
+  authProvider: 'local' | 'google' | 'facebook' | 'github' | 'apple' | 'phone' | 'firebase';
   cart: ICartItem[];
   wishlist: Schema.Types.ObjectId[];
+  preferredCategories: Schema.Types.ObjectId[];
+  recentlyViewed: IRecentlyViewedItem[];
+  savedAddresses: ISavedAddress[];
   refreshTokens: string[];
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +56,19 @@ const CartItemSchema = new Schema<ICartItem>({
   size: { type: String }
 }, { _id: false });
 
+const RecentlyViewedSchema = new Schema<IRecentlyViewedItem>({
+  productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  viewedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const SavedAddressSchema = new Schema<ISavedAddress>({
+  label: { type: String, required: true, trim: true, default: 'Home' },
+  fullName: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, trim: true },
+  address: { type: String, required: true, trim: true },
+  isDefault: { type: Boolean, default: false }
+});
+
 const UserSchema = new Schema<IUser>({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -43,9 +79,22 @@ const UserSchema = new Schema<IUser>({
     default: 'customer'
   },
   avatar: { type: String },
+  googleId: { type: String, sparse: true, index: true },
+  firebaseUid: { type: String, sparse: true, index: true },
+  phone: { type: String, sparse: true, index: true },
+  authProvider: {
+    type: String,
+    enum: ['local', 'google', 'facebook', 'github', 'apple', 'phone', 'firebase'],
+    default: 'local'
+  },
   cart: { type: [CartItemSchema], default: [] },
   wishlist: [{ type: Schema.Types.ObjectId, ref: 'Product' }],
-  refreshTokens: { type: [String], default: [], select: false }
+  preferredCategories: { type: [{ type: Schema.Types.ObjectId, ref: 'Category' }], default: [] },
+  recentlyViewed: { type: [RecentlyViewedSchema], default: [] },
+  savedAddresses: { type: [SavedAddressSchema], default: [] },
+  refreshTokens: { type: [String], default: [], select: false },
+  resetPasswordToken: { type: String, select: false },
+  resetPasswordExpires: { type: Date, select: false }
 }, {
   timestamps: true
 });

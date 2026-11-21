@@ -13,6 +13,10 @@ export const AuthProvider = ({ children }) => {
       if (currentToken) {
         const response = await api.auth.getProfile();
         setUser(response.user);
+        const latestToken = localStorage.getItem('token');
+        if (latestToken && latestToken !== currentToken) {
+          setToken(latestToken);
+        }
       } else {
         setUser(null);
       }
@@ -26,11 +30,22 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    const handleAuthExpired = () => {
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+    };
+    window.addEventListener('uconext:auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('uconext:auth-expired', handleAuthExpired);
+  }, []);
+
+  useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
       loadProfile(token);
     } else {
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       setUser(null);
       setLoading(false);
     }
@@ -40,6 +55,9 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.auth.login(email, password);
+      if (response.refreshToken) {
+        localStorage.setItem('refreshToken', response.refreshToken);
+      }
       setToken(response.token);
       setUser(response.user);
       return response.user;
@@ -53,6 +71,25 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.auth.register(name, email, password);
+      if (response.refreshToken) {
+        localStorage.setItem('refreshToken', response.refreshToken);
+      }
+      setToken(response.token);
+      setUser(response.user);
+      return response.user;
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const loginWithFirebase = async (idToken) => {
+    setLoading(true);
+    try {
+      const response = await api.auth.loginWithFirebase(idToken);
+      if (response.refreshToken) {
+        localStorage.setItem('refreshToken', response.refreshToken);
+      }
       setToken(response.token);
       setUser(response.user);
       return response.user;
@@ -63,9 +100,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    const currentRefreshToken = localStorage.getItem('refreshToken');
+    if (currentRefreshToken) {
+      api.auth.logout(currentRefreshToken).catch(() => {});
+    }
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
   };
 
   const updateUser = (updatedUser) => {
@@ -73,7 +115,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateUser, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, loginWithFirebase, logout, updateUser, isAdmin: user?.role === 'admin' }}>
       {children}
     </AuthContext.Provider>
   );

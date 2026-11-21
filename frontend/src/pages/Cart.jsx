@@ -16,6 +16,7 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  MapPin,
 } from 'lucide-react';
 
 const Cart = () => {
@@ -31,8 +32,11 @@ const Cart = () => {
   const [streetAddress, setStreetAddress] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'vnpay'
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutFeedback, setCheckoutFeedback] = useState(null);
+
+  const savedAddresses = Array.isArray(user?.savedAddresses) ? user.savedAddresses : [];
 
   // Promo Code states
   const [promoCode, setPromoCode] = useState('');
@@ -142,6 +146,32 @@ const Cart = () => {
     setCouponFeedback(null);
   };
 
+  const applySavedAddress = (addr) => {
+    if (!addr) return;
+    setSelectedAddressId(String(addr._id || addr.id || ''));
+    setFullName(addr.fullName || user?.name || '');
+    setPhoneNumber(addr.phone || '');
+
+    const rawAddress = (addr.address || '').trim();
+    const lastComma = rawAddress.lastIndexOf(',');
+    if (lastComma > 0 && lastComma < rawAddress.length - 1) {
+      setStreetAddress(rawAddress.slice(0, lastComma).trim());
+      setProvinceCity(rawAddress.slice(lastComma + 1).trim());
+    } else {
+      setStreetAddress(rawAddress);
+      setProvinceCity('');
+    }
+  };
+
+  useEffect(() => {
+    if (isCheckoutMode && user && savedAddresses.length > 0 && !selectedAddressId && !phoneNumber && !streetAddress) {
+      const defaultAddr = savedAddresses.find((a) => a.isDefault) || savedAddresses[0];
+      if (defaultAddr) {
+        applySavedAddress(defaultAddr);
+      }
+    }
+  }, [isCheckoutMode, user, savedAddresses.length, selectedAddressId, phoneNumber, streetAddress]);
+
   const handleProceedToCheckout = () => {
     setCheckoutFeedback(null);
     if (!user) {
@@ -149,14 +179,19 @@ const Cart = () => {
       return;
     }
     setIsCheckoutMode(true);
-    if (!fullName && user.name) setFullName(user.name);
+    if (savedAddresses.length > 0 && !selectedAddressId && !phoneNumber && !streetAddress) {
+      const defaultAddr = savedAddresses.find((a) => a.isDefault) || savedAddresses[0];
+      if (defaultAddr) applySavedAddress(defaultAddr);
+    } else if (!fullName && user.name) {
+      setFullName(user.name);
+    }
   };
 
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     setCheckoutFeedback(null);
 
-    if (!fullName.trim() || !phoneNumber.trim() || !provinceCity.trim() || !streetAddress.trim()) {
+    if (!fullName.trim() || !phoneNumber.trim() || !streetAddress.trim() || (!selectedAddressId && !provinceCity.trim())) {
       setCheckoutFeedback({ type: 'error', message: 'Please fill in recipient name, phone, city, and address.' });
       return;
     }
@@ -170,7 +205,11 @@ const Cart = () => {
         size: item.size,
       }));
 
-      const fullShippingAddress = `${fullName.trim()} | ${phoneNumber.trim()} | ${streetAddress.trim()}, ${provinceCity.trim()}${
+      const locationPart = provinceCity.trim()
+        ? `${streetAddress.trim()}, ${provinceCity.trim()}`
+        : streetAddress.trim();
+
+      const fullShippingAddress = `${fullName.trim()} | ${phoneNumber.trim()} | ${locationPart}${
         orderNotes ? ` (Note: ${orderNotes.trim()})` : ''
       }`;
 
@@ -203,21 +242,8 @@ const Cart = () => {
   if (cart.length === 0) {
     return (
       <div className="cart-page-container" style={{ textAlign: 'center', paddingTop: '80px', paddingBottom: '80px' }}>
-        <div
-          style={{
-            width: '88px',
-            height: '88px',
-            borderRadius: '50%',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--glass-border)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--brand)',
-            marginBottom: '24px',
-          }}
-        >
-          <ShoppingBag size={38} />
+        <div className="ui-empty-icon">
+          <ShoppingBag size={26} strokeWidth={1.6} />
         </div>
         <h2 style={{ fontSize: '26px', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: '700' }}>
           Your cart is empty
@@ -653,6 +679,79 @@ const Cart = () => {
                     Shipping Information
                   </label>
 
+                  {savedAddresses.length > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--glass-border)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                          <MapPin size={13} strokeWidth={1.75} color="var(--text-secondary)" />
+                          Saved Addresses
+                        </span>
+                        <Link to="/settings" style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--brand)', textDecoration: 'none' }}>
+                          Manage
+                        </Link>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {savedAddresses.map((addr) => {
+                          const addrId = String(addr._id || addr.id || '');
+                          const isSelected = selectedAddressId === addrId;
+                          return (
+                            <button
+                              key={addrId}
+                              type="button"
+                              onClick={() => applySavedAddress(addr)}
+                              style={{
+                                textAlign: 'left',
+                                padding: '8px 10px',
+                                borderRadius: '8px',
+                                border: isSelected ? '1px solid var(--brand)' : '1px solid var(--glass-border)',
+                                background: isSelected ? 'rgba(36, 84, 244, 0.1)' : 'var(--bg-secondary)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                transition: 'border-color 0.15s ease, background 0.15s ease',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                                  {addr.label || 'Home'}
+                                </span>
+                                {addr.isDefault && (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: '700',
+                                      padding: '1px 6px',
+                                      borderRadius: '999px',
+                                      background: 'rgba(36, 84, 244, 0.14)',
+                                      color: 'var(--brand)',
+                                    }}
+                                  >
+                                    Default
+                                  </span>
+                                )}
+                                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                                  · {addr.fullName} ({addr.phone})
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                                {addr.address}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
@@ -686,7 +785,7 @@ const Cart = () => {
 
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-                      Province / City *
+                      Province / City {selectedAddressId ? '(Optional if included above)' : '*'}
                     </span>
                     <input
                       type="text"
@@ -695,7 +794,7 @@ const Cart = () => {
                       placeholder="e.g. Hanoi / Ho Chi Minh City / Da Nang"
                       className="glass-input"
                       style={{ height: '40px', fontSize: '13px' }}
-                      required
+                      required={!selectedAddressId}
                     />
                   </div>
 
@@ -783,7 +882,7 @@ const Cart = () => {
                         style={{ accentColor: 'var(--brand)' }}
                       />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CreditCard size={14} color="var(--brand)" />
+                        <CreditCard size={15} strokeWidth={1.75} color="var(--text-secondary)" />
                         <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
                           VNPAY Online Payment
                         </span>

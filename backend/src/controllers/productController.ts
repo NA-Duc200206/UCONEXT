@@ -1,7 +1,20 @@
 import { Request, Response } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth';
 import { productService } from '../services/productService';
 
 export const productController = {
+  async getRecommended(req: AuthenticatedRequest, res: Response) {
+    try {
+      const limitParam = req.query.limit ? Number(req.query.limit) : 8;
+      const result = await productService.getRecommended(req.user, limitParam);
+      return res.status(200).json(result);
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Failed to retrieve recommended products.',
+        error: error.message
+      });
+    }
+  },
   async getAll(req: Request, res: Response) {
     try {
       const result = await productService.getAll(req.query);

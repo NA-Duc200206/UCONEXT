@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingCart, Trash2, Check, ArrowRight, Sparkles, LogIn } from 'lucide-react';
+import { Heart, ShoppingCart, Trash2, Check, ArrowRight, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
@@ -107,11 +107,11 @@ const Wishlist = () => {
                 fontWeight: '700',
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: '#2454F4',
+                color: isDark ? '#93c5fd' : '#2454F4',
                 marginBottom: '8px',
               }}
             >
-              <Heart size={14} fill="#2454F4" color="#2454F4" />
+              <Heart size={14} strokeWidth={1.75} />
               <span>Saved Collection</span>
             </div>
             <h1
@@ -177,20 +177,8 @@ const Wishlist = () => {
               textAlign: 'center',
             }}
           >
-            <div
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '16px',
-                background: 'rgba(36, 84, 244, 0.12)',
-                color: '#2454F4',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 18px',
-              }}
-            >
-              <Heart size={26} />
+            <div className="ui-empty-icon">
+              <Heart size={26} strokeWidth={1.6} />
             </div>
             <h2 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', margin: '0 0 10px' }}>
               Sign in to view your Wishlist
@@ -243,20 +231,8 @@ const Wishlist = () => {
               textAlign: 'center',
             }}
           >
-            <div
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '16px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                color: '#ef4444',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 18px',
-              }}
-            >
-              <Sparkles size={26} />
+            <div className="ui-empty-icon">
+              <Heart size={26} strokeWidth={1.6} />
             </div>
             <h2 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', margin: '0 0 10px' }}>
               Your wishlist is empty
@@ -339,7 +315,7 @@ const Wishlist = () => {
                           left: '10px',
                           background: 'rgba(15, 23, 42, 0.88)',
                           color: '#f87171',
-                          fontSize: '10.5px',
+                          fontSize: '11px',
                           fontWeight: '700',
                           padding: '4px 8px',
                           borderRadius: '6px',
