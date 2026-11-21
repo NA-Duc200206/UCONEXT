@@ -506,7 +506,7 @@ const Navbar = () => {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          transition: all 0.2s ease;
+          transition: color 0.2s ease, background-color 0.2s ease;
           white-space: nowrap;
           position: relative;
         }
@@ -685,7 +685,7 @@ const Navbar = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'color 0.2s ease, background-color 0.2s ease'
                 }}
                 title="Search"
                 onMouseEnter={e => {
@@ -716,7 +716,7 @@ const Navbar = () => {
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              transition: 'color 0.2s ease, background-color 0.2s ease'
             }}
             title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             onMouseEnter={e => {
@@ -747,7 +747,7 @@ const Navbar = () => {
                 justifyContent: 'center',
                 textDecoration: 'none',
                 position: 'relative',
-                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                transition: 'color 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
               title="Wishlist"
               onMouseEnter={e => {
@@ -765,9 +765,9 @@ const Navbar = () => {
                   position: 'absolute',
                   top: '1px',
                   right: '1px',
-                  background: '#ef4444',
+                  background: 'var(--color-error)',
                   color: 'white',
-                  fontSize: '10px',
+                  fontSize: '11px',
                   fontWeight: '800',
                   borderRadius: '50%',
                   width: '15px',
@@ -793,14 +793,14 @@ const Navbar = () => {
                 borderRadius: '10px',
                 background: cartBump ? 'rgba(36, 84, 244, 0.14)' : 'transparent',
                 border: cartBump ? '1px solid rgba(36, 84, 244, 0.45)' : '1px solid transparent',
-                color: cartBump ? '#2454F4' : 'var(--text-secondary)',
+                color: cartBump ? 'var(--brand)' : 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 textDecoration: 'none',
                 position: 'relative',
                 transform: cartBump ? 'scale(1.14)' : 'scale(1)',
-                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                transition: 'color 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
               title="Shopping Cart"
               onMouseEnter={e => {
@@ -818,9 +818,9 @@ const Navbar = () => {
                   position: 'absolute',
                   top: '1px',
                   right: '1px',
-                  background: cartBump ? '#10b981' : '#2454F4',
+                  background: cartBump ? 'var(--color-success)' : 'var(--brand)',
                   color: 'white',
-                  fontSize: '10px',
+                  fontSize: '11px',
                   fontWeight: '800',
                   borderRadius: '50%',
                   width: '15px',
@@ -829,7 +829,7 @@ const Navbar = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   transform: cartBump ? 'scale(1.22)' : 'scale(1)',
-                  transition: 'all 0.25s ease'
+                  transition: 'background-color 0.25s ease, transform 0.25s ease'
                 }}>
                   {cartCount}
                 </span>

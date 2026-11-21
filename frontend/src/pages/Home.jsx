@@ -260,7 +260,7 @@ const HomeProductCard = ({ product }) => {
             justifyContent: 'center',
             cursor: 'pointer',
             opacity: isHovered || wishlisted ? 1 : 0.85,
-            transition: 'all 0.2s ease',
+            transition: 'opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease',
             zIndex: 3,
           }}
         >
@@ -274,7 +274,7 @@ const HomeProductCard = ({ product }) => {
               right: '10px',
               background: 'rgba(15, 23, 42, 0.85)',
               color: '#f87171',
-              fontSize: '10.5px',
+              fontSize: '11px',
               fontWeight: '700',
               padding: '3px 8px',
               borderRadius: '5px',
@@ -308,11 +308,11 @@ const HomeProductCard = ({ product }) => {
       {product.category?.name && (
         <span
           style={{
-            fontSize: '10.5px',
+            fontSize: '11px',
             fontWeight: '700',
             letterSpacing: '0.07em',
             textTransform: 'uppercase',
-            color: '#2454F4',
+            color: 'var(--brand)',
             marginBottom: '4px',
           }}
         >
@@ -384,7 +384,7 @@ const HomeProductCard = ({ product }) => {
               fontSize: '11.5px',
               fontWeight: '700',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease',
               transform: isAdded ? 'scale(1.06)' : 'scale(1)',
               flexShrink: 0,
             }}
@@ -1581,9 +1581,9 @@ const Home = () => {
                 border: selectedCategory === 'all' ? '1px solid transparent' : '1px solid var(--glass-border)',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                background: selectedCategory === 'all' ? '#2454F4' : 'transparent',
+                background: selectedCategory === 'all' ? 'var(--brand)' : 'transparent',
                 color: selectedCategory === 'all' ? '#ffffff' : 'var(--text-secondary)',
-                transition: 'all 0.2s ease',
+                transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
               }}
             >
               All Products
@@ -1608,9 +1608,9 @@ const Home = () => {
                     border: isSelected ? '1px solid transparent' : '1px solid var(--glass-border)',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
-                    background: isSelected ? '#2454F4' : 'transparent',
+                    background: isSelected ? 'var(--brand)' : 'transparent',
                     color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
                   }}
                 >
                   {translateCategoryName(cat.name)}

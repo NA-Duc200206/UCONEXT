@@ -727,7 +727,7 @@ const Cart = () => {
                                 {addr.isDefault && (
                                   <span
                                     style={{
-                                      fontSize: '10px',
+                                      fontSize: '11px',
                                       fontWeight: '700',
                                       padding: '1px 6px',
                                       borderRadius: '999px',

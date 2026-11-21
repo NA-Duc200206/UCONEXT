@@ -227,7 +227,7 @@ const AdminOrders = () => {
                             value={order.paymentStatus}
                             onChange={(e) => handlePaymentStatusChange(order.id, e.target.value)}
                             className={`badge ${order.paymentStatus === 'paid' ? 'badge-success' : 'badge-warning'}`}
-                            style={{ border: 'none', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', outline: 'none' }}
+                            style={{ border: 'none', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', outline: 'none' }}
                           >
                             <option value="pending">Unpaid</option>
                             <option value="paid">Paid</option>

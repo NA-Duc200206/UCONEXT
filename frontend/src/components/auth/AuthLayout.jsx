@@ -236,7 +236,7 @@ const AuthLayout = ({
             cursor: 'pointer',
             fontSize: '12px',
             fontWeight: '600',
-            transition: 'all 0.2s ease',
+            transition: 'color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = isDark ? 'var(--text-primary)' : '#0f172a';

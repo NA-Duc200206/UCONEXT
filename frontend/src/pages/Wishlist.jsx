@@ -315,7 +315,7 @@ const Wishlist = () => {
                           left: '10px',
                           background: 'rgba(15, 23, 42, 0.88)',
                           color: '#f87171',
-                          fontSize: '10.5px',
+                          fontSize: '11px',
                           fontWeight: '700',
                           padding: '4px 8px',
                           borderRadius: '6px',

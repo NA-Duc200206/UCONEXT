@@ -568,7 +568,7 @@ const ProductDetail = () => {
                       cursor: 'pointer',
                       fontWeight: '700',
                       fontSize: '13.5px',
-                      transition: 'all 0.2s ease',
+                      transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
                     }}
                   >
                     <Heart
@@ -1137,17 +1137,17 @@ const pageStyles = `
     background: var(--bg-secondary);
     color: var(--text-secondary);
     border: 1px solid var(--glass-border);
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
 
   .pd-variant-btn:hover {
-    border-color: #2454F4;
+    border-color: var(--brand);
     color: var(--text-primary);
   }
 
   .pd-variant-btn.active {
-    background: #2454F4;
-    border-color: #2454F4;
+    background: var(--brand);
+    border-color: var(--brand);
     color: #ffffff;
   }
 
