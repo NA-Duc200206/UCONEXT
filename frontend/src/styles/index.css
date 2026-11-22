@@ -360,10 +360,12 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
 }
 
-.glass-input:focus {
+.glass-input:focus,
+.glass-input:focus-visible {
+  outline: none;
   background: var(--input-focus-bg);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-glow);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(36, 84, 244, 0.14);
 }
 
 .glass-input::placeholder {

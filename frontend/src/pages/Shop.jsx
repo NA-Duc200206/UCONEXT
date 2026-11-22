@@ -713,6 +713,12 @@ const Shop = () => {
           outline: none;
           flex-shrink: 0;
         }
+        .shop-sort-select:focus,
+        .shop-sort-select:focus-visible {
+          outline: none;
+          border-color: var(--brand);
+          box-shadow: 0 0 0 3px rgba(36, 84, 244, 0.14);
+        }
         @media (max-width: 1280px) {
           .shop-products-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));

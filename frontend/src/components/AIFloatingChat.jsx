@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   MessageCircle,
+  Compass,
   ArrowUp,
+  ArrowRight,
+  ChevronDown,
   X,
   Minimize2,
   Maximize2,
@@ -12,6 +15,9 @@ import {
   AlertCircle,
   RefreshCw,
   Plus,
+  Tag,
+  Package,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
@@ -48,14 +54,21 @@ function createWelcomeMessage(userName) {
   };
 }
 
-function renderBoldSegments(line, keyPrefix) {
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+function renderInlineSegments(line, keyPrefix) {
+  const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return (
         <strong key={`${keyPrefix}-b-${idx}`} style={{ fontWeight: 700 }}>
           {part.slice(2, -2)}
         </strong>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code key={`${keyPrefix}-c-${idx}`} className="uc-chat-inline-code">
+          {part.slice(1, -1)}
+        </code>
       );
     }
     return <React.Fragment key={`${keyPrefix}-t-${idx}`}>{part}</React.Fragment>;
@@ -72,15 +85,32 @@ function renderFormattedText(text) {
         if (!trimmed) {
           return <div key={`sp-${idx}`} className="uc-chat-prose-spacer" />;
         }
+        const headingMatch = trimmed.match(/^#{1,3}\s+(.+)$/);
+        if (headingMatch) {
+          return (
+            <div key={`hd-${idx}`} className="uc-chat-prose-heading">
+              {renderInlineSegments(headingMatch[1], `hd-${idx}`)}
+            </div>
+          );
+        }
+        const orderedMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
+        if (orderedMatch) {
+          return (
+            <div key={`ol-${idx}`} className="uc-chat-prose-ordered">
+              <span className="uc-chat-ordered-num uc-tabular">{orderedMatch[1]}.</span>
+              <span>{renderInlineSegments(orderedMatch[2], `ol-${idx}`)}</span>
+            </div>
+          );
+        }
         if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
           return (
             <div key={`li-${idx}`} className="uc-chat-prose-bullet">
               <span className="uc-chat-bullet-dot" aria-hidden="true" />
-              <span>{renderBoldSegments(trimmed.slice(2), `li-${idx}`)}</span>
+              <span>{renderInlineSegments(trimmed.slice(2), `li-${idx}`)}</span>
             </div>
           );
         }
-        return <div key={`ln-${idx}`}>{renderBoldSegments(line, `ln-${idx}`)}</div>;
+        return <div key={`ln-${idx}`}>{renderInlineSegments(line, `ln-${idx}`)}</div>;
       })}
     </div>
   );
@@ -102,12 +132,51 @@ const AIFloatingChat = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [addedProdIds, setAddedProdIds] = useState({});
   const [copiedCode, setCopiedCode] = useState(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const drawerRef = useRef(null);
   const threadRef = useRef(null);
+  const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messagesRef = useRef(messages);
   const timersRef = useRef([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const focusTimer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 120);
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (confirmClear) {
+          setConfirmClear(false);
+        } else {
+          setIsOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, confirmClear]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
+  }, [inputValue, isOpen]);
+
+  const handleThreadScroll = useCallback(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBtn(distanceFromBottom > 120);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -400,16 +469,46 @@ const AIFloatingChat = () => {
   const starterSuggestions = (() => {
     const list = [];
     if (currentProductId) {
-      list.push('Tư vấn chi tiết sản phẩm này', 'So sánh sản phẩm này với mẫu tương tự');
+      list.push(
+        { label: 'Analyze this product', prompt: 'Tell me the highlights and details of this product', icon: 'sparkles' },
+        { label: 'Compare similar items', prompt: 'Compare this product with similar alternatives', icon: 'compare' }
+      );
     }
     if (user) {
-      list.push('Gợi ý theo sở thích của tôi', 'Kiểm tra đơn hàng của tôi');
+      list.push(
+        { label: 'Picks for me', prompt: 'Recommend products based on my preferences', icon: 'sparkles' },
+        { label: 'Track my orders', prompt: 'Check the status of my recent orders', icon: 'order' }
+      );
     } else {
-      list.push('Best noise-canceling headphones', 'Certified skincare essentials');
+      list.push(
+        { label: 'Top headphones', prompt: 'Best noise-canceling headphones in store', icon: 'sparkles' },
+        { label: 'Skincare essentials', prompt: 'Top rated skincare essentials', icon: 'sparkles' }
+      );
     }
-    list.push('Tìm sản phẩm dưới 1 triệu', 'Mã giảm giá cho giỏ hàng');
-    return Array.from(new Set(list)).slice(0, 4);
+    list.push(
+      { label: 'Under 1,000,000 VND', prompt: 'Find great products under 1,000,000 VND', icon: 'compare' },
+      { label: 'Active promo codes', prompt: 'Show available promo codes for my cart', icon: 'coupon' }
+    );
+    const seen = new Set();
+    return list.filter((item) => {
+      if (seen.has(item.label)) return false;
+      seen.add(item.label);
+      return true;
+    }).slice(0, 4);
   })();
+
+  const renderStarterIcon = (type) => {
+    switch (type) {
+      case 'coupon':
+        return <Tag size={13} />;
+      case 'order':
+        return <Package size={13} />;
+      case 'compare':
+        return <SlidersHorizontal size={13} />;
+      default:
+        return <Compass size={13} />;
+    }
+  };
 
   const hasConversationStarted = messages.some((m) => m.sender === 'user');
   const isUnconfigured = aiStatus !== null && !aiStatus.configured;
@@ -433,8 +532,11 @@ const AIFloatingChat = () => {
           className="uc-chat-trigger"
           aria-label="Open UCONEXT shopping assistant"
         >
-          <MessageCircle size={17} strokeWidth={2} />
-          <span>UCONEXT Assistant</span>
+          <span className="uc-chat-trigger-icon" aria-hidden="true">
+            <MessageCircle size={15} strokeWidth={2.2} />
+            <span className={`uc-chat-live-dot ${isUnconfigured ? 'is-warn' : ''}`} />
+          </span>
+          <span>UCONEXT AI</span>
         </motion.button>
       )}
 
@@ -453,13 +555,16 @@ const AIFloatingChat = () => {
             {/* Standardized UCONEXT Header */}
             <header className="uc-chat-header">
               <div className="uc-chat-header-id">
-                <div className="ui-icon-box" style={{ width: '36px', height: '36px' }} aria-hidden="true">
+                <div className="uc-chat-avatar" aria-hidden="true">
                   <GlowLogoIcon size={18} color="#2454F4" />
+                  <span className={`uc-chat-avatar-dot ${isUnconfigured ? 'is-warn' : ''}`} />
                 </div>
                 <div className="uc-chat-header-text">
-                  <div className="uc-chat-title">UCONEXT Assistant</div>
+                  <div className="uc-chat-title-row">
+                    <span className="uc-chat-title">UCONEXT Assistant</span>
+                    <span className="uc-chat-ai-badge">AI</span>
+                  </div>
                   <div className="uc-chat-subtitle">
-                    {isUnconfigured && <span className="uc-chat-setup-dot" aria-hidden="true" />}
                     <span>{headerSubtitle}</span>
                   </div>
                 </div>
@@ -478,7 +583,7 @@ const AIFloatingChat = () => {
                 <button
                   type="button"
                   onClick={() => setIsExpanded((prev) => !prev)}
-                  className="uc-chat-icon-btn"
+                  className="uc-chat-icon-btn uc-chat-expand-btn"
                   title={isExpanded ? 'Compact view' : 'Expand view'}
                   aria-label={isExpanded ? 'Compact view' : 'Expand view'}
                 >
@@ -488,7 +593,7 @@ const AIFloatingChat = () => {
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="uc-chat-icon-btn"
-                  title="Close"
+                  title="Close (Esc)"
                   aria-label="Close"
                 >
                   <X size={16} />
@@ -531,41 +636,50 @@ const AIFloatingChat = () => {
             )}
 
             {/* Messages Thread */}
-            <div ref={threadRef} className="uc-chat-thread">
+            <div ref={threadRef} onScroll={handleThreadScroll} className="uc-chat-thread">
               {messages.map((msg) => {
                 if (msg.sender === 'user') {
                   return (
                     <div key={msg.id} className="uc-chat-turn is-user">
                       <div className="uc-chat-user-pill">{msg.text}</div>
+                      {msg.time && <span className="uc-chat-time is-user">{msg.time}</span>}
                     </div>
                   );
                 }
 
                 return (
                   <div key={msg.id} className="uc-chat-turn is-assistant">
-                    {msg.isError ? (
-                      <div className="uc-chat-error-box" role="alert">
-                        <div className="uc-chat-error-row">
-                          <AlertCircle size={15} className="uc-chat-error-icon" />
-                          <span>{msg.text}</span>
-                        </div>
-                        {msg.retryText && (
-                          <button
-                            type="button"
-                            disabled={isTyping}
-                            onClick={() => handleSendMessage(msg.retryText)}
-                            className="uc-chat-retry-btn"
-                          >
-                            <RefreshCw size={12} />
-                            <span>Retry</span>
-                          </button>
+                    <div className="uc-chat-assistant-row">
+                      <div className="uc-chat-mini-avatar" aria-hidden="true">
+                        <GlowLogoIcon size={13} color="#2454F4" />
+                      </div>
+                      <div className="uc-chat-assistant-col">
+                        {msg.isError ? (
+                          <div className="uc-chat-error-box" role="alert">
+                            <div className="uc-chat-error-row">
+                              <AlertCircle size={15} className="uc-chat-error-icon" />
+                              <span>{msg.text}</span>
+                            </div>
+                            {msg.retryText && (
+                              <button
+                                type="button"
+                                disabled={isTyping}
+                                onClick={() => handleSendMessage(msg.retryText)}
+                                className="uc-chat-retry-btn"
+                              >
+                                <RefreshCw size={12} />
+                                <span>Retry</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="uc-chat-assistant-bubble">
+                            {renderFormattedText(msg.text)}
+                          </div>
                         )}
+                        {msg.time && <span className="uc-chat-time">{msg.time}</span>}
                       </div>
-                    ) : (
-                      <div className="uc-chat-assistant-bubble">
-                        {renderFormattedText(msg.text)}
-                      </div>
-                    )}
+                    </div>
 
                     {/* Comparison Block */}
                     {msg.comparison && msg.comparison.products?.length >= 2 && (
@@ -768,31 +882,55 @@ const AIFloatingChat = () => {
 
               {/* Starter Prompts before first user message */}
               {!hasConversationStarted && !isTyping && (
-                <div className="uc-chat-starters">
-                  {starterSuggestions.map((sug, i) => (
-                    <button
-                      key={`${sug}-${i}`}
-                      type="button"
-                      onClick={() => handleSendMessage(sug)}
-                      className="uc-chat-starter-btn"
-                    >
-                      {sug}
-                    </button>
-                  ))}
+                <div className="uc-chat-starters-wrap">
+                  <div className="uc-chat-starters-label">Quick actions</div>
+                  <div className="uc-chat-starters">
+                    {starterSuggestions.map((sug, i) => (
+                      <button
+                        key={`${sug.label}-${i}`}
+                        type="button"
+                        onClick={() => handleSendMessage(sug.prompt)}
+                        className="uc-chat-starter-btn"
+                      >
+                        <span className="uc-chat-starter-icon" aria-hidden="true">
+                          {renderStarterIcon(sug.icon)}
+                        </span>
+                        <span className="uc-chat-starter-text">{sug.label}</span>
+                        <ArrowRight size={12} className="uc-chat-starter-arrow" aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Typing Indicator */}
               {isTyping && (
-                <div className="uc-chat-typing" aria-label="Assistant is typing">
-                  <span />
-                  <span />
-                  <span />
+                <div className="uc-chat-typing-row">
+                  <div className="uc-chat-mini-avatar" aria-hidden="true">
+                    <GlowLogoIcon size={13} color="#2454F4" />
+                  </div>
+                  <div className="uc-chat-typing" aria-label="Assistant is typing">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
                 </div>
               )}
 
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Scroll-to-bottom Floating Pill */}
+            {showScrollBtn && (
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="uc-chat-scroll-btn"
+                aria-label="Scroll to latest messages"
+              >
+                <ChevronDown size={15} />
+              </button>
+            )}
 
             {/* Unified Composer */}
             <form
@@ -803,12 +941,20 @@ const AIFloatingChat = () => {
               className="uc-chat-composer-wrap"
             >
               <div className="uc-chat-composer">
-                <input
-                  type="text"
+                <textarea
+                  ref={inputRef}
+                  rows={1}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
                   placeholder={currentProductId ? 'Ask about this product or compare...' : 'Ask about products, coupons, or orders...'}
                   className="uc-chat-input"
+                  aria-label="Message UCONEXT Assistant"
                 />
                 <button
                   type="submit"
@@ -818,6 +964,9 @@ const AIFloatingChat = () => {
                 >
                   <ArrowUp size={16} strokeWidth={2.25} />
                 </button>
+              </div>
+              <div className="uc-chat-composer-hint">
+                <span>Enter to send · Shift+Enter for new line</span>
               </div>
             </form>
           </motion.div>
@@ -840,14 +989,16 @@ const chatStyles = `
   .uc-chat-trigger {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    height: 44px;
-    padding: 0 18px;
+    gap: 9px;
+    height: 46px;
+    padding: 0 18px 0 14px;
     border-radius: 999px;
-    background: #2454F4;
+    background: linear-gradient(135deg, var(--brand) 0%, #3b6cff 100%);
     color: #ffffff;
-    border: none;
-    box-shadow: 0 4px 14px rgba(36, 84, 244, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow:
+      0 8px 24px rgba(36, 84, 244, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24);
     cursor: pointer;
     font-size: 13.5px;
     font-weight: 700;
@@ -856,21 +1007,51 @@ const chatStyles = `
   }
 
   .uc-chat-trigger:hover {
-    background: #1b3ec8;
-    transform: translateY(-1px);
-    box-shadow: 0 8px 22px rgba(36, 84, 244, 0.34);
+    transform: translateY(-2px);
+    box-shadow:
+      0 12px 28px rgba(36, 84, 244, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 
   .uc-chat-trigger:active {
     transform: scale(0.96);
   }
 
+  .uc-chat-trigger-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .uc-chat-live-dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #34d399;
+    border: 1.5px solid var(--brand);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.28);
+  }
+
+  .uc-chat-live-dot.is-warn {
+    background: var(--color-warning);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28);
+  }
+
   .uc-chat-drawer {
-    width: 396px;
+    position: relative;
+    width: 410px;
     max-width: calc(100vw - 32px);
-    height: 560px;
+    height: 580px;
     max-height: calc(100vh - 96px);
-    border-radius: 20px;
+    border-radius: 22px;
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
@@ -882,23 +1063,28 @@ const chatStyles = `
   }
 
   .uc-chat-drawer.is-dark {
-    background: rgba(18, 20, 29, 0.96);
-    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5);
+    background: rgba(15, 17, 25, 0.96);
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   }
 
   .uc-chat-drawer.is-light {
     background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+    box-shadow:
+      0 22px 48px rgba(15, 23, 42, 0.14),
+      0 0 0 1px rgba(15, 23, 42, 0.04) inset;
   }
 
   .uc-chat-drawer.is-expanded {
-    width: 500px;
-    height: 660px;
+    width: 520px;
+    height: 680px;
   }
 
   .uc-chat-header {
     padding: 14px 14px 14px 16px;
     border-bottom: 1px solid var(--glass-border);
+    background: radial-gradient(circle at 12% 0%, rgba(36, 84, 244, 0.12), transparent 65%);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -909,12 +1095,46 @@ const chatStyles = `
   .uc-chat-header-id {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 11px;
     min-width: 0;
+  }
+
+  .uc-chat-avatar {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: rgba(36, 84, 244, 0.1);
+    border: 1px solid rgba(36, 84, 244, 0.22);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .uc-chat-avatar-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--color-success);
+    border: 2px solid var(--bg-secondary);
+  }
+
+  .uc-chat-avatar-dot.is-warn {
+    background: var(--color-warning);
   }
 
   .uc-chat-header-text {
     min-width: 0;
+  }
+
+  .uc-chat-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .uc-chat-title {
@@ -923,6 +1143,18 @@ const chatStyles = `
     letter-spacing: -0.02em;
     color: var(--text-primary);
     line-height: 1.25;
+  }
+
+  .uc-chat-ai-badge {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(36, 84, 244, 0.12);
+    color: var(--brand);
+    border: 1px solid rgba(36, 84, 244, 0.22);
+    line-height: 1.5;
   }
 
   .uc-chat-subtitle {
@@ -934,15 +1166,7 @@ const chatStyles = `
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 1px;
-  }
-
-  .uc-chat-setup-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #f59e0b;
-    flex-shrink: 0;
+    margin-top: 2px;
   }
 
   .uc-chat-header-actions {
@@ -1048,32 +1272,80 @@ const chatStyles = `
 
   .uc-chat-turn.is-user {
     align-self: flex-end;
-    max-width: 82%;
+    max-width: 84%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
 
   .uc-chat-turn.is-assistant {
     align-self: flex-start;
-    max-width: 92%;
+    width: 100%;
+    max-width: 96%;
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
+  .uc-chat-assistant-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .uc-chat-mini-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    background: rgba(36, 84, 244, 0.1);
+    border: 1px solid rgba(36, 84, 244, 0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .uc-chat-assistant-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .uc-chat-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 4px;
+  }
+
+  .uc-chat-time.is-user {
+    text-align: right;
+  }
+
   .uc-chat-user-pill {
     padding: 10px 14px;
-    border-radius: 14px 14px 4px 14px;
-    background: #2454F4;
+    border-radius: 16px 16px 4px 16px;
+    background: linear-gradient(135deg, var(--brand) 0%, #1d46d8 100%);
     color: #ffffff;
     font-size: 13.5px;
     line-height: 1.5;
+    box-shadow: 0 4px 14px rgba(36, 84, 244, 0.24);
     text-wrap: pretty;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .uc-chat-assistant-bubble {
     padding: 11px 14px;
-    border-radius: 14px 14px 14px 4px;
+    border-radius: 4px 16px 16px 16px;
     background: var(--bg-elevated);
     border: 1px solid var(--glass-border);
+    max-width: 100%;
   }
 
   .uc-chat-prose {
@@ -1084,6 +1356,38 @@ const chatStyles = `
     line-height: 1.55;
     color: var(--text-primary);
     text-wrap: pretty;
+    word-break: break-word;
+  }
+
+  .uc-chat-prose-heading {
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    margin-top: 4px;
+  }
+
+  .uc-chat-inline-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(36, 84, 244, 0.1);
+    color: var(--brand);
+    border: 1px solid rgba(36, 84, 244, 0.16);
+  }
+
+  .uc-chat-prose-ordered {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+  }
+
+  .uc-chat-ordered-num {
+    font-weight: 700;
+    color: var(--brand);
+    flex-shrink: 0;
   }
 
   .uc-chat-prose-spacer {
@@ -1100,7 +1404,7 @@ const chatStyles = `
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: #2454F4;
+    background: var(--brand);
     margin-top: 9px;
     flex-shrink: 0;
   }
@@ -1422,34 +1726,88 @@ const chatStyles = `
     color: #ffffff;
   }
 
-  .uc-chat-starters {
+  .uc-chat-starters-wrap {
     display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 2px;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 32px;
+  }
+
+  .uc-chat-starters-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .uc-chat-starters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .uc-chat-starter-btn {
-    padding: 7px 12px;
-    border-radius: 8px;
+    padding: 9px 10px;
+    border-radius: 12px;
     border: 1px solid var(--glass-border);
     background: var(--bg-secondary);
-    color: var(--text-secondary);
+    color: var(--text-primary);
     font-size: 12px;
     font-weight: 600;
     text-align: left;
     cursor: pointer;
-    transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease, transform 120ms ease;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease, transform 120ms ease, box-shadow 140ms ease;
+  }
+
+  .uc-chat-starter-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: rgba(36, 84, 244, 0.1);
+    color: var(--brand);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .uc-chat-starter-text {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  .uc-chat-starter-arrow {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    opacity: 0.65;
+    transition: transform 140ms ease, color 140ms ease, opacity 140ms ease;
   }
 
   .uc-chat-starter-btn:hover {
-    border-color: #2454F4;
-    color: #2454F4;
+    border-color: rgba(36, 84, 244, 0.45);
     background: var(--bg-elevated);
+    box-shadow: 0 4px 12px rgba(36, 84, 244, 0.08);
+  }
+
+  .uc-chat-starter-btn:hover .uc-chat-starter-arrow {
+    color: var(--brand);
+    opacity: 1;
+    transform: translateX(2px);
   }
 
   .uc-chat-starter-btn:active {
     transform: scale(0.98);
+  }
+
+  .uc-chat-typing-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .uc-chat-typing {
@@ -1457,7 +1815,7 @@ const chatStyles = `
     align-items: center;
     gap: 5px;
     padding: 10px 14px;
-    border-radius: 14px 14px 14px 4px;
+    border-radius: 4px 14px 14px 14px;
     background: var(--bg-elevated);
     border: 1px solid var(--glass-border);
     align-self: flex-start;
@@ -1467,7 +1825,8 @@ const chatStyles = `
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--text-muted);
+    background: var(--brand);
+    opacity: 0.7;
     animation: ucChatPulse 1.1s infinite ease-in-out;
   }
 
@@ -1480,22 +1839,47 @@ const chatStyles = `
   }
 
   @keyframes ucChatPulse {
-    0%, 80%, 100% { opacity: 0.28; transform: scale(0.88); }
+    0%, 80%, 100% { opacity: 0.25; transform: scale(0.84); }
     40% { opacity: 1; transform: scale(1); }
   }
 
+  .uc-chat-scroll-btn {
+    position: absolute;
+    right: 16px;
+    bottom: 84px;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 4;
+    transition: border-color 140ms ease, color 140ms ease, transform 140ms ease;
+  }
+
+  .uc-chat-scroll-btn:hover {
+    border-color: var(--brand);
+    color: var(--brand);
+    transform: translateY(-1px);
+  }
+
   .uc-chat-composer-wrap {
-    padding: 10px 14px 14px 14px;
+    padding: 10px 14px 10px 14px;
     border-top: 1px solid var(--glass-border);
     flex-shrink: 0;
   }
 
   .uc-chat-composer {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 8px;
-    padding: 5px 5px 5px 14px;
-    border-radius: 10px;
+    padding: 6px 6px 6px 14px;
+    border-radius: 14px;
     border: 1px solid var(--glass-border);
     background: var(--input-bg);
     transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
@@ -1503,7 +1887,7 @@ const chatStyles = `
 
   .uc-chat-composer:focus-within {
     background: var(--input-focus-bg);
-    border-color: #2454F4;
+    border-color: var(--brand);
     box-shadow: 0 0 0 3px rgba(36, 84, 244, 0.14);
   }
 
@@ -1513,7 +1897,17 @@ const chatStyles = `
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    padding: 6px 0;
+    resize: none;
+    max-height: 96px;
+    overflow-y: auto;
+    outline: none;
+  }
+
+  .uc-chat-input:focus,
+  .uc-chat-input:focus-visible {
     outline: none;
   }
 
@@ -1524,20 +1918,20 @@ const chatStyles = `
   .uc-chat-send-btn {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: none;
-    background: #2454F4;
+    background: linear-gradient(135deg, var(--brand) 0%, #3b6cff 100%);
     color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background-color 140ms ease, opacity 140ms ease, transform 120ms ease;
+    transition: background-color 140ms ease, opacity 140ms ease, transform 120ms ease, box-shadow 140ms ease;
   }
 
   .uc-chat-send-btn:hover:not(:disabled) {
-    background: #1b3ec8;
+    box-shadow: 0 4px 12px rgba(36, 84, 244, 0.34);
   }
 
   .uc-chat-send-btn:active:not(:disabled) {
@@ -1545,12 +1939,61 @@ const chatStyles = `
   }
 
   .uc-chat-send-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.38;
     cursor: not-allowed;
+  }
+
+  .uc-chat-composer-hint {
+    margin-top: 6px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.8;
   }
 
   .uc-tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 640px) {
+    .uc-chat-root {
+      bottom: 14px;
+      right: 14px;
+      left: 14px;
+      display: flex;
+      justify-content: flex-end;
+      pointer-events: none;
+    }
+
+    .uc-chat-trigger,
+    .uc-chat-drawer {
+      pointer-events: auto;
+    }
+
+    .uc-chat-drawer,
+    .uc-chat-drawer.is-expanded {
+      width: 100%;
+      max-width: 100%;
+      height: min(78vh, 620px);
+      max-height: calc(100vh - 28px);
+      border-radius: 20px;
+    }
+
+    .uc-chat-expand-btn {
+      display: none;
+    }
+
+    .uc-chat-starters-wrap {
+      padding-left: 0;
+    }
+
+    .uc-chat-starters {
+      grid-template-columns: 1fr;
+    }
+
+    .uc-chat-composer-hint {
+      display: none;
+    }
   }
 `;
 
