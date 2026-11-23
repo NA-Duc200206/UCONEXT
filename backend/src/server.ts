@@ -6,12 +6,19 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import http from 'http';
+import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 
 import { connectDB } from './config/db';
-import { connectRedis } from './config/redis';
+import { connectRedis, redisClient } from './config/redis';
 import { seedDatabase } from './config/seed';
 import { setIO } from './config/socket';
+import {
+  isOriginAllowed,
+  parseAllowedOrigins,
+  shouldAutoSeed,
+  validateProductionEnv,
+} from './config/security';
 
 import authRoutes from './routes/authRoutes';
 import categoryRoutes from './routes/categoryRoutes';
@@ -29,14 +36,38 @@ import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = parseAllowedOrigins();
+
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
+const corsOriginValidator = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+) => {
+  if (isOriginAllowed(origin, allowedOrigins, isProduction)) {
+    return callback(null, true);
+  }
+  const error: any = new Error(`Origin "${origin}" is not allowed by CORS.`);
+  error.statusCode = 403;
+  return callback(error);
+};
 
 // Security and Utility Middlewares
 app.use(helmet({
-  contentSecurityPolicy: false
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
-app.use(cors());
-app.use(express.json());
-app.use(morgan('dev'));
+app.use(cors({
+  origin: corsOriginValidator,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+}));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(morgan(isProduction ? 'combined' : 'dev'));
 
 // Static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
@@ -54,20 +85,41 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/ai', aiRoutes);
 
-// Global Error Handler
-app.use(errorHandler);
-
-// Health check
+// Health checks
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to UCONEXT Enterprise TS API Server', status: 'Running' });
 });
+
+app.get('/api/health', (req, res) => {
+  const dbReadyState = mongoose.connection.readyState;
+  const dbConnected = dbReadyState === 1;
+  const statusCode = dbConnected ? 200 : 503;
+
+  res.status(statusCode).json({
+    status: dbConnected ? 'ok' : 'degraded',
+    environment: process.env.NODE_ENV || 'development',
+    uptimeSeconds: Math.round(process.uptime()),
+    db: {
+      connected: dbConnected,
+      readyState: dbReadyState,
+    },
+    redis: {
+      connected: Boolean(redisClient.isReady),
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Global Error Handler (must be registered after routes)
+app.use(errorHandler);
 
 // Setup HTTP Server & Socket.io
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
+    origin: corsOriginValidator,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   }
 });
 setIO(io);
@@ -85,17 +137,46 @@ export { io };
 // Boot Server
 const bootServer = async () => {
   try {
+    const prodIssues = validateProductionEnv();
+    if (prodIssues.length > 0) {
+      throw new Error(`Invalid production configuration:\n- ${prodIssues.join('\n- ')}`);
+    }
+
     await connectDB();
     await connectRedis();
-    await seedDatabase();
-    
+
+    if (shouldAutoSeed()) {
+      await seedDatabase();
+    } else {
+      console.log('ℹ️ Skipping automatic database seed (disabled in production unless AUTO_SEED=true).');
+    }
+
     server.listen(PORT, () => {
       console.log(`✔ Server is running on http://localhost:${PORT}`);
     });
   } catch (err: any) {
     console.error('❌ Failed to boot server:', err.message);
+    process.exit(1);
   }
 };
+
+const shutdown = async (signal: string) => {
+  console.log(`\n⏳ Received ${signal}. Shutting down gracefully...`);
+  server.close(async () => {
+    try {
+      await mongoose.disconnect();
+      if (redisClient.isOpen) {
+        await redisClient.quit();
+      }
+    } catch {
+      // Ignore cleanup errors during shutdown
+    }
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 bootServer();
 export default app;
