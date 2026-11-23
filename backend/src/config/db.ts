@@ -14,6 +14,9 @@ export const connectDB = async (): Promise<void> => {
       await mongoose.connect(connStr, { serverSelectionTimeoutMS: timeoutMs });
       console.log('✔ MongoDB connected successfully.');
     } catch (localErr: any) {
+      if (process.env.NODE_ENV === 'production') {
+        throw localErr;
+      }
       console.warn(`⚠️ Primary MongoDB connection failed (${localErr?.message || 'unknown error'}). Starting MongoMemoryServer fallback (data will NOT persist across restarts)...`);
       mongoServer = await MongoMemoryServer.create();
       const uri = mongoServer.getUri();
