@@ -269,6 +269,7 @@ export const orderService = {
     }
 
     const previousStatus = order.status;
+    const isRestockedState = (s: string) => s === 'cancelled' || s === 'refund_completed';
 
     if (status) {
       order.status = status as any;
@@ -278,22 +279,22 @@ export const orderService = {
         note: 'Status updated by Admin.',
       });
 
-      if (status === 'completed' || status === 'shipping') {
+      if (status === 'delivered' || status === 'completed') {
         order.paymentStatus = 'paid';
       }
 
-      if (status === 'cancelled' && previousStatus !== 'cancelled') {
+      if (!isRestockedState(previousStatus) && isRestockedState(status)) {
         for (const item of order.items) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
         }
-        if (order.couponCode) {
+        if (status === 'cancelled' && order.couponCode) {
           await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
         }
-      } else if (previousStatus === 'cancelled' && status !== 'cancelled') {
+      } else if (isRestockedState(previousStatus) && !isRestockedState(status)) {
         for (const item of order.items) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
         }
-        if (order.couponCode) {
+        if (previousStatus === 'cancelled' && order.couponCode) {
           await Coupon.updateOne({ code: order.couponCode }, { $inc: { usedCount: 1 } });
         }
       }

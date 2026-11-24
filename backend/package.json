@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync(p.join('dist','config'),{recursive:true});fs.copyFileSync(p.join('src','config','unsplashPools.json'),p.join('dist','config','unsplashPools.json'));\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "seed:images": "ts-node-dev --transpile-only --no-notify src/scripts/fetchUnsplashImages.ts"

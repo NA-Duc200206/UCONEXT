@@ -14,38 +14,52 @@ import {
 
 export const seedDatabase = async () => {
   try {
-    // 1. Seed Users
-    // Remove old seed users if present to ensure clean state
-    await User.deleteMany({ email: { $in: ['admin@novacommerce.com', 'customer@novacommerce.com', 'admin@glowstore.com', 'customer@glowstore.com'] } });
+    // 1. Seed Users (upsert so _id and linked orders/reviews/sessions persist across restarts)
+    await User.deleteMany({ email: { $in: ['admin@novacommerce.com', 'customer@novacommerce.com'] } });
 
-    const adminExist = await User.findOne({ email: 'admin@glowstore.com' });
-    const customerExist = await User.findOne({ email: 'customer@glowstore.com' });
-    
-    const salt = await bcrypt.genSalt(10);
-    const adminPassword = await bcrypt.hash('admin123', salt);
-    const customerPassword = await bcrypt.hash('customer123', salt);
+    const [existingAdmin, existingCustomer] = await Promise.all([
+      User.findOne({ email: 'admin@glowstore.com' }),
+      User.findOne({ email: 'customer@glowstore.com' }),
+    ]);
 
-    if (!adminExist) {
-      await User.create({
-        name: 'GlowStore Admin',
-        email: 'admin@glowstore.com',
-        password: adminPassword,
-        role: 'admin',
-        cart: [],
-        wishlist: []
-      });
+    if (!existingAdmin || !existingCustomer) {
+      const salt = await bcrypt.genSalt(12);
+      if (!existingAdmin) {
+        const adminPassword = await bcrypt.hash('admin123', salt);
+        await User.findOneAndUpdate(
+          { email: 'admin@glowstore.com' },
+          {
+            $setOnInsert: {
+              name: 'UCONEXT Admin',
+              email: 'admin@glowstore.com',
+              password: adminPassword,
+              role: 'admin',
+              cart: [],
+              wishlist: [],
+            },
+          },
+          { upsert: true, returnDocument: 'after' }
+        );
+      }
+      if (!existingCustomer) {
+        const customerPassword = await bcrypt.hash('customer123', salt);
+        await User.findOneAndUpdate(
+          { email: 'customer@glowstore.com' },
+          {
+            $setOnInsert: {
+              name: 'John Doe',
+              email: 'customer@glowstore.com',
+              password: customerPassword,
+              role: 'customer',
+              cart: [],
+              wishlist: [],
+            },
+          },
+          { upsert: true, returnDocument: 'after' }
+        );
+      }
     }
-    if (!customerExist) {
-      await User.create({
-        name: 'John Doe',
-        email: 'customer@glowstore.com',
-        password: customerPassword,
-        role: 'customer',
-        cart: [],
-        wishlist: []
-      });
-    }
-    console.log('✔ Seeded users: admin@glowstore.com / customer@glowstore.com');
+    console.log('✔ Verified seed users: admin@glowstore.com / customer@glowstore.com');
 
     // 2. Seed Categories & Products
     const categoryCount = await Category.countDocuments();

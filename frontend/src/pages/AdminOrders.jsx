@@ -60,8 +60,8 @@ const AdminOrders = () => {
   const handleStatusChange = async (orderId, newStatus) => {
     try {
       let paymentStatus = undefined;
-      // Auto transition payment status
-      if (newStatus === 'completed' || newStatus === 'shipping') {
+      // Auto transition payment status only upon delivery/completion
+      if (newStatus === 'delivered' || newStatus === 'completed') {
         paymentStatus = 'paid';
       }
       

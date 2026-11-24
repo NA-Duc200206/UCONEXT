@@ -221,15 +221,21 @@ const Cart = () => {
       });
 
       const order = orderResponse.order;
+      const createdOrderId = order?.id || order?._id || '';
 
       if (paymentMethod === 'vnpay') {
-        const paymentResponse = await api.payments.createPaymentUrl(order.id);
+        const paymentResponse = await api.payments.createPaymentUrl(createdOrderId);
         const paymentUrl = paymentResponse.paymentUrl;
-        clearCart();
+        try {
+          sessionStorage.setItem('uconext_pending_vnpay_cart', JSON.stringify(cart));
+        } catch {
+          // Ignore storage quota errors
+        }
+        await clearCart();
         window.location.href = paymentUrl;
       } else {
-        clearCart();
-        navigate('/payment-result?method=cod');
+        await clearCart();
+        navigate(`/payment-result?method=cod&orderId=${encodeURIComponent(createdOrderId)}`);
       }
     } catch (error) {
       setCheckoutFeedback({ type: 'error', message: error.message || 'Failed to place order. Please try again.' });
@@ -418,12 +424,20 @@ const Cart = () => {
                   </span>
                   <button
                     type="button"
+                    disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
                     onClick={() => updateQuantity(item.productId, item.quantity + 1, item.color, item.size)}
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
+                      color:
+                        typeof item.stock === 'number' && item.quantity >= item.stock
+                          ? 'var(--text-muted)'
+                          : 'var(--text-primary)',
+                      cursor:
+                        typeof item.stock === 'number' && item.quantity >= item.stock
+                          ? 'not-allowed'
+                          : 'pointer',
+                      opacity: typeof item.stock === 'number' && item.quantity >= item.stock ? 0.45 : 1,
                       width: '34px',
                       height: '34px',
                       display: 'flex',

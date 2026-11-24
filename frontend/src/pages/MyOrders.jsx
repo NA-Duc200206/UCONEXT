@@ -113,9 +113,11 @@ const MyOrders = () => {
       case 'completed':
         return <span className="badge badge-success">Delivered</span>;
       case 'cancelled':
-      case 'refund_requested':
-      case 'refund_completed':
         return <span className="badge badge-error">Cancelled</span>;
+      case 'refund_requested':
+        return <span className="badge badge-warning">Refund Requested</span>;
+      case 'refund_completed':
+        return <span className="badge badge-secondary">Refunded</span>;
       default:
         return <span className="badge">{status}</span>;
     }
