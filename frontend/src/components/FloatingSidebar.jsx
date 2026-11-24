@@ -148,11 +148,11 @@ const FloatingSidebar = ({ onOpenChat }) => {
                       fontSize: '14px',
                       fontWeight: '600',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: 'border-color 0.2s ease, transform 0.2s ease, background-color 0.2s ease',
                       textAlign: 'left'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#2454F4';
+                      e.currentTarget.style.borderColor = 'var(--brand)';
                       e.currentTarget.style.transform = 'translateX(4px)';
                     }}
                     onMouseLeave={(e) => {

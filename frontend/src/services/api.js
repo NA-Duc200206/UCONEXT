@@ -1,9 +1,65 @@
 const BASE_URL = '/api';
+const AUTH_SKIP_REFRESH_ENDPOINTS = new Set([
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+]);
+
+let refreshPromise = null;
+
+function clearAuthStorage() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('uconext:auth-expired'));
+  }
+}
+
+async function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      clearAuthStorage();
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.token) {
+        clearAuthStorage();
+        return null;
+      }
+
+      localStorage.setItem('token', data.token);
+      if (data.refreshToken) {
+        localStorage.setItem('refreshToken', data.refreshToken);
+      }
+      return data.token;
+    } catch {
+      clearAuthStorage();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
 
 /**
  * Helper to make HTTP requests with JSON body and JWT headers
  */
-async function request(endpoint, { method = 'GET', body = null, token = null } = {}) {
+async function request(endpoint, { method = 'GET', body = null, token = null, _retry = false } = {}) {
   const headers = {
     'Content-Type': 'application/json',
   };
@@ -25,12 +81,25 @@ async function request(endpoint, { method = 'GET', body = null, token = null } =
 
   try {
     const response = await fetch(`${BASE_URL}${endpoint}`, config);
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.message || 'An unexpected error occurred.');
+
+    if (response.status === 401 && !_retry && !AUTH_SKIP_REFRESH_ENDPOINTS.has(endpoint) && !token) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        return request(endpoint, { method, body, token: newToken, _retry: true });
+      }
     }
-    
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const err = new Error(data.message || 'An unexpected error occurred.');
+      err.status = response.status;
+      err.code = data.code;
+      err.provider = data.provider;
+      err.model = data.model;
+      throw err;
+    }
+
     return data;
   } catch (error) {
     console.error(`API Error on ${endpoint}:`, error.message);
@@ -38,7 +107,7 @@ async function request(endpoint, { method = 'GET', body = null, token = null } =
   }
 }
 
-async function uploadImageFile(endpoint, file) {
+async function uploadImageFile(endpoint, file, _retry = false) {
   const formData = new FormData();
   formData.append('image', file);
   const token = localStorage.getItem('token');
@@ -47,6 +116,14 @@ async function uploadImageFile(endpoint, file) {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData
   });
+
+  if (res.status === 401 && !_retry) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      return uploadImageFile(endpoint, file, true);
+    }
+  }
+
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || 'Image upload failed');
   return data;
@@ -57,10 +134,24 @@ export const api = {
   auth: {
     login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
     register: (name, email, password) => request('/auth/register', { method: 'POST', body: { name, email, password } }),
+    loginWithFirebase: (idToken) => request('/auth/firebase', { method: 'POST', body: { idToken } }),
+    loginWithGoogle: (payload) => request('/auth/google', { method: 'POST', body: payload }),
+    refresh: (refreshToken) => request('/auth/refresh', { method: 'POST', body: { refreshToken } }),
+    logout: (refreshToken) => request('/auth/logout', { method: 'POST', body: { refreshToken } }),
+    forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: { email } }),
+    resetPassword: (token, newPassword) => request('/auth/reset-password', { method: 'POST', body: { token, newPassword } }),
     getProfile: () => request('/auth/me'),
     updateProfile: (profileData) => request('/auth/me', { method: 'PUT', body: profileData }),
     changePassword: (currentPassword, newPassword) => request('/auth/password', { method: 'PUT', body: { currentPassword, newPassword } }),
     syncCart: (cart) => request('/auth/cart', { method: 'PUT', body: { cart } }),
+    updatePreferences: (preferredCategories) => request('/auth/preferences', { method: 'PUT', body: { preferredCategories } }),
+    getAddresses: () => request('/auth/addresses'),
+    addAddress: (addressData) => request('/auth/addresses', { method: 'POST', body: addressData }),
+    updateAddress: (addressId, addressData) => request(`/auth/addresses/${addressId}`, { method: 'PUT', body: addressData }),
+    deleteAddress: (addressId) => request(`/auth/addresses/${addressId}`, { method: 'DELETE' }),
+    getRecentlyViewed: () => request('/auth/recently-viewed'),
+    addRecentlyViewed: (productId) => request(`/auth/recently-viewed/${productId}`, { method: 'POST' }),
+    clearRecentlyViewed: () => request('/auth/recently-viewed', { method: 'DELETE' }),
     getAllUsers: () => request('/auth/users'),
     updateUserRole: (id, role) => request(`/auth/users/${id}/role`, { method: 'PUT', body: { role } }),
   },
@@ -86,6 +177,7 @@ export const api = {
       return request(`/products?${queryString}`);
     },
     getById: (id) => request(`/products/${id}`),
+    getRecommended: (limit = 8) => request(`/products/recommended?limit=${limit}`),
     create: (productData) => request('/products', { method: 'POST', body: productData }),
     update: (id, productData) => request(`/products/${id}`, { method: 'PUT', body: productData }),
     delete: (id) => request(`/products/${id}`, { method: 'DELETE' }),
@@ -145,6 +237,18 @@ export const api = {
 
   // AI Assistant
   ai: {
-    chat: (message) => request('/ai/chat', { method: 'POST', body: { message } }),
+    getStatus: () => request('/ai/status'),
+    chat: (message, options = {}) =>
+      request('/ai/chat', {
+        method: 'POST',
+        body: {
+          message,
+          ...(options.history ? { history: options.history } : {}),
+          ...(options.context ? { context: options.context } : {}),
+        },
+      }),
+    getHistory: () => request('/ai/history'),
+    clearHistory: () => request('/ai/history', { method: 'DELETE' }),
+    getProductSummary: (productId) => request(`/ai/products/${productId}/summary`),
   }
 };

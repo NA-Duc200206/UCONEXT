@@ -52,7 +52,7 @@ const ProductCard = ({ product }) => {
     >
       <Link 
         to={`/product/${product._id || product.id}`} 
-        className="glass-card product-card-hover" 
+        className="product-card-hover" 
         style={{
           textDecoration: 'none',
           color: 'inherit',
@@ -66,7 +66,7 @@ const ProductCard = ({ product }) => {
           background: 'var(--glass-bg)',
           border: '1px solid',
           borderColor: isHovered ? 'var(--brand, #2454F4)' : 'var(--glass-border)',
-          transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
           transform: isHovered ? 'translateY(-6px)' : 'translateY(0)',
           boxShadow: isHovered ? '0 20px 40px -10px rgba(36, 84, 244, 0.18)' : '0 8px 24px -10px rgba(0,0,0,0.08)',
           zIndex: isHovered ? 10 : 1
@@ -110,7 +110,7 @@ const ProductCard = ({ product }) => {
             )}
             {product.stock === 0 && (
               <span style={{
-                background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontSize: '10px', fontWeight: '700',
+                background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: '700',
                 padding: '3px 8px', borderRadius: '4px', border: '1px solid var(--glass-border)', letterSpacing: '0.04em'
               }}>
                 OUT OF STOCK
@@ -129,7 +129,7 @@ const ProductCard = ({ product }) => {
             gap: '8px',
             opacity: isHovered || wishlisted ? 1 : 0,
             transform: isHovered || wishlisted ? 'translateY(0)' : 'translateY(10px)',
-            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             zIndex: 3
           }}>
             <button
@@ -145,16 +145,16 @@ const ProductCard = ({ product }) => {
                 background: 'var(--glass-bg)', backdropFilter: 'blur(8px)',
                 border: wishlisted ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid var(--glass-border)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: wishlisted ? '#ef4444' : 'var(--text-primary)', cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                color: wishlisted ? 'var(--color-error)' : 'var(--text-primary)', cursor: 'pointer',
+                transition: 'color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.color = '#ef4444';
-                e.currentTarget.style.borderColor = '#ef4444';
+                e.currentTarget.style.color = 'var(--color-error)';
+                e.currentTarget.style.borderColor = 'var(--color-error)';
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.color = wishlisted ? '#ef4444' : 'var(--text-primary)';
+                e.currentTarget.style.color = wishlisted ? 'var(--color-error)' : 'var(--text-primary)';
                 e.currentTarget.style.borderColor = wishlisted ? 'rgba(239, 68, 68, 0.5)' : 'var(--glass-border)';
               }}
             >
@@ -170,10 +170,10 @@ const ProductCard = ({ product }) => {
                 border: '1px solid var(--glass-border)',
                 display: isHovered ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
                 color: 'var(--text-primary)', cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#2454F4'; e.currentTarget.style.borderColor = '#2454F4'; }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand)'; e.currentTarget.style.borderColor = 'var(--brand)'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
             >
               <Eye size={15} />
@@ -182,7 +182,7 @@ const ProductCard = ({ product }) => {
         </div>
 
         <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-          <span style={{ fontSize: '11px', color: '#2454F4', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '6px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--brand)', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '6px' }}>
             {translateCategoryName(product.category?.name || product.category || 'Featured')}
           </span>
 
@@ -250,10 +250,10 @@ const ProductCard = ({ product }) => {
                   height: '38px',
                   padding: isAdded ? '0 10px' : '0',
                   borderRadius: '10px',
-                  background: isAdded ? '#10b981' : isHovered ? '#2454F4' : 'var(--glass-bg)',
+                  background: isAdded ? 'var(--color-success)' : isHovered ? 'var(--brand)' : 'var(--glass-bg)',
                   color: isAdded || isHovered ? '#ffffff' : 'var(--text-primary)',
                   border: '1px solid',
-                  borderColor: isAdded ? '#10b981' : isHovered ? 'transparent' : 'var(--glass-border)',
+                  borderColor: isAdded ? 'var(--color-success)' : isHovered ? 'transparent' : 'var(--glass-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -261,7 +261,7 @@ const ProductCard = ({ product }) => {
                   fontSize: '12px',
                   fontWeight: '700',
                   cursor: 'pointer',
-                  transition: 'all 0.25s ease',
+                  transition: 'background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease',
                   boxShadow: isAdded
                     ? '0 6px 16px rgba(16, 185, 129, 0.3)'
                     : isHovered

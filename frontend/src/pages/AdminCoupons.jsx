@@ -140,7 +140,7 @@ const AdminCoupons = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Ticket size={28} color="var(--brand)" /> Discount Coupons & Vouchers
+              <span className="ui-icon-box-lg"><Ticket size={20} strokeWidth={1.75} /></span> Discount Coupons & Vouchers
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
               Create and manage promotional discount vouchers for checkout campaigns.
@@ -163,7 +163,9 @@ const AdminCoupons = () => {
         </div>
       ) : coupons.length === 0 ? (
         <div className="admin-surface" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-          <Ticket size={40} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+          <div className="ui-empty-icon">
+            <Ticket size={26} strokeWidth={1.6} />
+          </div>
           <p style={{ fontSize: '16px', fontWeight: '500' }}>No discount coupons created yet.</p>
           <button 
             onClick={() => setShowModal(true)} 

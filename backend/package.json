@@ -7,6 +7,8 @@
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "seed:images": "ts-node-dev --transpile-only --no-notify src/scripts/fetchUnsplashImages.ts"
   },
   "dependencies": {
@@ -16,11 +18,13 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
+    "firebase-admin": "^14.5.1",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.1",
     "morgan": "^1.10.0",
     "multer": "^2.2.0",
+    "nodemailer": "^10.6.0",
     "qs": "^6.15.2",
     "redis": "^6.0.0",
     "socket.io": "^4.8.3",
@@ -35,9 +39,11 @@
     "@types/morgan": "^1.9.10",
     "@types/multer": "^2.1.0",
     "@types/node": "^26.0.0",
+    "@types/nodemailer": "^8.0.2",
     "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.0",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
   }
 }

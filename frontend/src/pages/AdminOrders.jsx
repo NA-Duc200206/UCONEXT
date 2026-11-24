@@ -132,7 +132,9 @@ const AdminOrders = () => {
         <Link to="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '13px' }}>
           <ChevronLeft size={14} /> Back to Dashboard
         </Link>
-        <h1 style={{ fontSize: '32px', color: 'var(--text-primary)' }}>Manage Orders</h1>
+        <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span className="ui-icon-box-lg"><ShoppingBag size={20} strokeWidth={1.75} /></span> Manage Orders
+        </h1>
       </div>
 
       {/* Orders Container */}
@@ -225,7 +227,7 @@ const AdminOrders = () => {
                             value={order.paymentStatus}
                             onChange={(e) => handlePaymentStatusChange(order.id, e.target.value)}
                             className={`badge ${order.paymentStatus === 'paid' ? 'badge-success' : 'badge-warning'}`}
-                            style={{ border: 'none', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', outline: 'none' }}
+                            style={{ border: 'none', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', outline: 'none' }}
                           >
                             <option value="pending">Unpaid</option>
                             <option value="paid">Paid</option>

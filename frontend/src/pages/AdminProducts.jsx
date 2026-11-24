@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Eye, DollarSign, ShoppingBag, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Eye, DollarSign, ShoppingBag, Package, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
 
 const AdminProducts = () => {
@@ -219,7 +219,9 @@ const AdminProducts = () => {
           <Link to="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }} className="back-link">
             <ChevronLeft size={14} /> Back to Dashboard
           </Link>
-          <h1 style={{ fontSize: '32px', color: 'var(--text-primary)' }}>Product Inventory</h1>
+          <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span className="ui-icon-box-lg"><Package size={20} strokeWidth={1.75} /></span> Product Inventory
+          </h1>
         </div>
         <button onClick={openAddModal} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Plus size={16} /> Add New Product
@@ -240,8 +242,8 @@ const AdminProducts = () => {
               <TrendingUp size={12} /> +12.5% <span style={{ color: 'var(--text-muted)', fontWeight: '400' }}>vs last month</span>
             </span>
           </div>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <DollarSign size={22} color="var(--color-success)" />
+          <div className="ui-icon-box-lg">
+            <DollarSign size={20} strokeWidth={1.75} />
           </div>
         </div>
 
@@ -256,8 +258,8 @@ const AdminProducts = () => {
               <TrendingUp size={12} /> +8.2% <span style={{ color: 'var(--text-muted)', fontWeight: '400' }}>vs yesterday</span>
             </span>
           </div>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ShoppingBag size={22} color="#3b82f6" />
+          <div className="ui-icon-box-lg">
+            <ShoppingBag size={20} strokeWidth={1.75} />
           </div>
         </div>
 
@@ -272,8 +274,8 @@ const AdminProducts = () => {
               <AlertTriangle size={12} /> {metrics.lowStockCount > 0 ? 'Restock Needed' : 'Safe'}
             </span>
           </div>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <AlertTriangle size={22} color="#f59e0b" />
+          <div className="ui-icon-box-lg">
+            <AlertTriangle size={20} strokeWidth={1.75} color={metrics.lowStockCount > 0 ? 'var(--color-warning)' : 'var(--text-primary)'} />
           </div>
         </div>
 
@@ -391,7 +393,7 @@ const AdminProducts = () => {
                                 <Eye size={14} />
                               </Link>
                               <button onClick={() => openEditModal(prod)} className="btn btn-accent action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="Edit">
-                                <Edit2 size={14} />
+                                <Pencil size={14} strokeWidth={1.75} />
                               </button>
                               <button onClick={() => setConfirmDeleteId(prod.id)} className="btn btn-danger action-btn-icon" style={{ padding: '8px', borderRadius: '8px' }} title="Delete">
                                 <Trash2 size={14} />
