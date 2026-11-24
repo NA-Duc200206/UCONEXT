@@ -18,18 +18,27 @@ export interface ProductQueryParams {
   sort?: string;
 }
 
+function escapeProductSearchRegex(raw: string): string {
+  return raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const productService = {
   async getAll(params: ProductQueryParams) {
-    const { search, categoryId, minPrice, maxPrice, page = '1', limit = '9', sort } = params;
+    const { search, categoryId, minPrice, maxPrice, page = '1', limit = '9', sort } = params || {};
 
-    const query: any = {};
+    const query: any = { isDeleted: { $ne: true } };
 
     if (search) {
-      query.name = { $regex: search.toString(), $options: 'i' };
+      const trimmedSearch = search.toString().trim().slice(0, 120);
+      if (trimmedSearch) {
+        query.name = { $regex: escapeProductSearchRegex(trimmedSearch), $options: 'i' };
+      }
     }
 
-    const pageNum = parseInt(page.toString()) || 1;
-    const limitNum = parseInt(limit.toString()) || 9;
+    const parsedPage = parseInt(page.toString(), 10);
+    const parsedLimit = parseInt(limit.toString(), 10);
+    const pageNum = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
+    const limitNum = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 1200) : 9;
 
     if (categoryId) {
       const rawIds = typeof categoryId === 'string' && categoryId.includes(',')
@@ -94,7 +103,13 @@ export const productService = {
   },
 
   async getById(id: string) {
-    const product = await Product.findById(id).populate('categoryId', 'name slug');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const error: any = new Error('Product does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const product = await Product.findOne({ _id: id, isDeleted: { $ne: true } }).populate('categoryId', 'name slug');
     if (!product) {
       const error: any = new Error('Product does not exist.');
       error.statusCode = 404;
@@ -150,6 +165,11 @@ export const productService = {
   },
 
   async update(id: string, data: any) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const error: any = new Error('Product does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
     const product = await Product.findById(id);
     if (!product) {
       const error: any = new Error('Product does not exist.');
@@ -182,6 +202,11 @@ export const productService = {
   },
 
   async delete(id: string) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const error: any = new Error('Product does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
     const product = await Product.findByIdAndDelete(id);
     if (!product) {
       const error: any = new Error('Product does not exist.');

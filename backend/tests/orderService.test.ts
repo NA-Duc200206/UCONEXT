@@ -223,5 +223,111 @@ describe('orderService', () => {
     expect((await Product.findById(product._id))?.stock).toBe(10);
     expect((await Coupon.findById(coupon._id))?.usedCount).toBe(0);
   });
+
+  it('rejects negative, zero, fractional, or non-numeric item quantities without altering stock', async () => {
+    const { user, category, product } = await seedOrderFixtures();
+    const expensive = await Product.create({
+      name: 'Flagship Laptop',
+      slug: 'flagship-laptop',
+      price: 2000000,
+      stock: 5,
+      categoryId: category._id as any,
+    });
+
+    for (const badQty of [-3, 0, 1.5, NaN, 'abc']) {
+      await expect(
+        orderService.createOrder(user._id.toString(), {
+          items: [
+            { productId: expensive._id.toString(), quantity: 1 },
+            { productId: product._id.toString(), quantity: badQty as any },
+          ],
+          shippingAddress: '123 Nguyen Hue, HCMC',
+        })
+      ).rejects.toMatchObject({ statusCode: 400 });
+    }
+
+    expect((await Product.findById(product._id))?.stock).toBe(10);
+    expect((await Product.findById(expensive._id))?.stock).toBe(5);
+  });
+
+  it('aggregates duplicate product lines, persists item image, and prevents concurrent overselling', async () => {
+    const { user, category } = await seedOrderFixtures();
+    const limited = await Product.create({
+      name: 'Limited Watch',
+      slug: 'limited-watch',
+      price: 1500000,
+      stock: 10,
+      image: 'https://images.unsplash.com/photo-watch',
+      categoryId: category._id as any,
+    });
+
+    // Two variants of the same product totaling 12 > stock 10 must fail
+    await expect(
+      orderService.createOrder(user._id.toString(), {
+        items: [
+          { productId: limited._id.toString(), quantity: 6, color: 'Black' },
+          { productId: limited._id.toString(), quantity: 6, color: 'Silver' },
+        ],
+        shippingAddress: '123 Nguyen Hue, HCMC',
+      })
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect((await Product.findById(limited._id))?.stock).toBe(10);
+
+    // Concurrent checkouts: 3 buyers each requesting 6 units from stock 10 => at most 1 succeeds
+    const results = await Promise.allSettled([
+      orderService.createOrder(user._id.toString(), {
+        items: [{ productId: limited._id.toString(), quantity: 6 }],
+        shippingAddress: 'Addr 1',
+      }),
+      orderService.createOrder(user._id.toString(), {
+        items: [{ productId: limited._id.toString(), quantity: 6 }],
+        shippingAddress: 'Addr 2',
+      }),
+      orderService.createOrder(user._id.toString(), {
+        items: [{ productId: limited._id.toString(), quantity: 6 }],
+        shippingAddress: 'Addr 3',
+      }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<any>[];
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(2);
+    expect(fulfilled[0].value.items[0].image).toBe('https://images.unsplash.com/photo-watch');
+
+    const afterProduct = await Product.findById(limited._id);
+    expect(afterProduct?.stock).toBe(4);
+  });
+
+  it('expires stale unpaid VNPAY orders and restores stock and coupon usage', async () => {
+    const { user, product, coupon } = await seedOrderFixtures();
+
+    const staleVnpay = await orderService.createOrder(user._id.toString(), {
+      items: [{ productId: product._id.toString(), quantity: 2 }],
+      shippingAddress: '123 Nguyen Hue, HCMC',
+      paymentMethod: 'vnpay',
+      couponCode: 'WELCOME50K',
+    });
+
+    // Backdate createdAt to 20 minutes ago
+    const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000);
+    await Product.db.collection('orders').updateOne(
+      { _id: new Types.ObjectId(staleVnpay.id.toString()) },
+      { $set: { createdAt: twentyMinAgo } }
+    );
+
+    const expiredCount = await (orderService as any).expireStaleVnpayOrders(15 * 60 * 1000);
+    expect(expiredCount).toBe(1);
+
+    const refreshedOrder = await orderService.getOrderById(
+      staleVnpay.id.toString(),
+      user._id.toString(),
+      'customer'
+    );
+    expect(refreshedOrder.status).toBe('cancelled');
+    expect(refreshedOrder.paymentStatus).toBe('failed');
+    expect((await Product.findById(product._id))?.stock).toBe(10);
+    expect((await Coupon.findById(coupon._id))?.usedCount).toBe(0);
+  });
 });
 

@@ -47,5 +47,9 @@ backup/
 # Context windows 
 /context/
 
+# Uploaded runtime files
+backend/public/uploads/*
+!backend/public/uploads/.gitkeep
+
 # .agent
 .agents/

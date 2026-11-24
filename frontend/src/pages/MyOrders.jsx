@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { subscribeToEvent } from '../services/socket';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
 import { Package, Calendar, CreditCard, ShoppingBag, AlertTriangle, Tag, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -17,6 +18,7 @@ const ORDER_TABS = [
 
 const MyOrders = () => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -39,15 +41,27 @@ const MyOrders = () => {
     };
     fetchOrders();
 
-    // Subscribe to live status updates
+    // Subscribe to live status updates scoped to this customer
     const unsubscribeUpdate = subscribeToEvent('order:updated', (updatedOrder) => {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === updatedOrder.id || o._id === updatedOrder._id ? { ...o, ...updatedOrder } : o))
-      );
-      showToast(
-        `Order #${String(updatedOrder.id || updatedOrder._id).slice(-6)} status updated to ${updatedOrder.status}.`,
-        'info'
-      );
+      const ownerId =
+        updatedOrder?.userId && typeof updatedOrder.userId === 'object'
+          ? updatedOrder.userId._id || updatedOrder.userId.id
+          : updatedOrder?.userId;
+      if (user?.id && ownerId && String(ownerId) !== String(user.id)) {
+        return;
+      }
+
+      setOrders((prev) => {
+        const matched = prev.some((o) => o.id === updatedOrder.id || o._id === updatedOrder._id);
+        if (!matched) return prev;
+        showToast(
+          `Order #${String(updatedOrder.id || updatedOrder._id).slice(-6)} status updated to ${updatedOrder.status}.`,
+          'info'
+        );
+        return prev.map((o) =>
+          o.id === updatedOrder.id || o._id === updatedOrder._id ? { ...o, ...updatedOrder } : o
+        );
+      });
     });
 
     return () => {

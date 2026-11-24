@@ -219,5 +219,39 @@ describe('couponService', () => {
     expect(active).toHaveLength(1);
     expect(active[0].code).toBe('ACTIVE1');
   });
+
+  it('rejects NaN or negative orderAmount and invalid coupon configuration values', async () => {
+    await Coupon.create({
+      code: 'VALID10',
+      discountType: 'percentage',
+      discountValue: 10,
+      minOrderAmount: 100000,
+      startDate: daysFromNow(-1),
+      endDate: daysFromNow(5),
+      usageLimit: 10,
+      perUserLimit: 1,
+    });
+
+    await expect(couponService.validateCoupon('VALID10', NaN)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(couponService.validateCoupon('VALID10', -50000)).rejects.toMatchObject({ statusCode: 400 });
+
+    await expect(
+      couponService.create({
+        code: 'BADPCT',
+        discountType: 'percentage',
+        discountValue: 150,
+      })
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    await expect(
+      couponService.create({
+        code: 'BADDATE',
+        discountType: 'fixed',
+        discountValue: 50000,
+        startDate: daysFromNow(5),
+        endDate: daysFromNow(1),
+      })
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
 });
 
