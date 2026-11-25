@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend Test & Build
+    name: Backend Test, Typecheck & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -36,14 +36,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run backend tests
-        run: npm test
+      - name: Run backend unit & HTTP integration tests
+        run: npm run test:backend
 
-      - name: Build backend
-        run: npm run build:backend
+      - name: Typecheck tests & build backend
+        run: npm run typecheck:backend
 
   frontend:
-    name: Frontend Build
+    name: Frontend Test & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -59,6 +59,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run frontend unit tests
+        run: npm run test:frontend
+
       - name: Build frontend
         run: npm run build:frontend
-

@@ -12,6 +12,7 @@ export default defineConfig({
           'motion-vendor': ['framer-motion'],
           'charts-vendor': ['recharts'],
           'icons-vendor': ['lucide-react'],
+          'firebase-vendor': ['firebase/app', 'firebase/auth'],
         },
       },
     },

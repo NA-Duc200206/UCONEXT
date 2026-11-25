@@ -183,8 +183,11 @@ const shutdown = async (signal: string) => {
   });
 };
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+if (require.main === module && !process.env.VITEST) {
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  bootServer();
+}
 
-bootServer();
+export { bootServer, server };
 export default app;

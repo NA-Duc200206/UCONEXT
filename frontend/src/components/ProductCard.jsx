@@ -160,10 +160,9 @@ const ProductCard = ({ product }) => {
             >
               <Heart size={15} fill={wishlisted ? '#ef4444' : 'none'} />
             </button>
-            <button
-              type="button"
-              title="Quick View"
-              onClick={(e) => e.preventDefault()}
+            <span
+              title="View Details"
+              aria-hidden="true"
               style={{
                 width: '36px', height: '36px', borderRadius: '50%',
                 background: 'var(--glass-bg)', backdropFilter: 'blur(8px)',
@@ -173,11 +172,9 @@ const ProductCard = ({ product }) => {
                 transition: 'color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand)'; e.currentTarget.style.borderColor = 'var(--brand)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
             >
               <Eye size={15} />
-            </button>
+            </span>
           </div>
         </div>
 
