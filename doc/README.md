@@ -1,4 +1,4 @@
-# GlowStore Platform
+# UCONEXT Platform
 
 ### Enterprise Full Stack E-Commerce Platform
 
@@ -6,7 +6,7 @@
 
 # 1. Project Overview
 
-GlowStore Platform is a Full Stack enterprise-grade e-commerce system designed to simulate the actual operating processes of real-world online stores like Logitech, ASUS Store, Nike Store, or Apple Store.
+UCONEXT Platform is a Full Stack enterprise-grade e-commerce system designed to simulate the actual operating processes of real-world online stores like Logitech, ASUS Store, Nike Store, or Apple Store.
 
 Unlike typical CRUD projects, this project focuses on:
 
@@ -28,45 +28,40 @@ The entire project is designed to be scalable into a real-world e-commerce platf
 
 ## Frontend
 
-* React
-* Vite
-* TypeScript
-* TailwindCSS
-* React Router
-* TanStack Query
-* Axios
+* React 18
+* Vite 6
+* React Router 6
+* TailwindCSS 4
 * Framer Motion
-* React Hook Form
-* Zod
-* Zustand
+* Recharts
+* Lucide Icons
+* Firebase Auth
+* Socket.IO Client
 
 ---
 
 ## Backend
 
-* NodeJS
-* ExpressJS
+* Node.js 22
+* Express
 * TypeScript
-* MongoDB
-* Mongoose
-* Redis
-* JWT Authentication
-* Refresh Token Rotation
-* Socket.io
-* Winston Logger
-* Multer
-* Cloudinary
+* MongoDB & Mongoose 9
+* Redis 6
+* JWT Authentication & Refresh Token Rotation
+* Socket.IO (JWT-authenticated rooms)
+* Multer (raster image upload)
+* Nodemailer (SMTP)
+* Helmet & Express Rate Limit
 
 ---
 
-## DevOps
+## DevOps & Testing
 
-* Docker
-* Docker Compose
-* Nginx
-* GitHub Actions
-* Vercel
-* Render
+* Docker & Docker Compose
+* Nginx (SPA + Reverse Proxy)
+* GitHub Actions CI
+* Vitest + `mongodb-memory-server` (Backend)
+* Node `node:test` (Frontend)
 
 ---
 
