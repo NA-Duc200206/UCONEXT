@@ -5,7 +5,7 @@ import { productService } from '../src/services/productService';
 import * as uploadModule from '../src/routes/uploadRoutes';
 import * as aiModule from '../src/services/aiService';
 
-describe('Phase 1 input & upload hardening', () => {
+describe('input, upload & socket room hardening', () => {
   beforeAll(async () => {
     await connectTestDB();
   });

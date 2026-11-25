@@ -58,7 +58,13 @@ export const orderController = {
     try {
       const { id } = req.params;
       const { status, paymentStatus } = req.body;
-      const order = await orderService.updateOrderStatus(id, status, paymentStatus);
+      const order = await orderService.updateOrderStatus(
+        id,
+        status,
+        paymentStatus,
+        req.user?._id?.toString(),
+        req.ip
+      );
       return res.status(200).json({
         message: 'Order status updated successfully.',
         order

@@ -6,7 +6,7 @@ import { analyticsService } from '../src/services/analyticsService';
 import { reviewService } from '../src/services/reviewService';
 import { emailService } from '../src/services/emailService';
 
-describe('Phase 2 order payment lifecycle, analytics revenue, and reviews', () => {
+describe('analyticsService & reviewService', () => {
   beforeAll(async () => {
     await connectTestDB();
     vi.spyOn(emailService, 'sendOrderConfirmation').mockResolvedValue(undefined as any);

@@ -344,12 +344,18 @@ const Shop = () => {
   const { user, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [allProducts, setAllProducts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [recommendedIds, setRecommendedIds] = useState([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [recommendedProducts, setRecommendedProducts] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState(() => {
+    const q = searchParams.get('search') || '';
+    return NAVBAR_CATEGORY_ALIASES[q.toLowerCase()] ? '' : q;
+  });
+  const [debouncedSearch, setDebouncedSearch] = useState(() => {
     const q = searchParams.get('search') || '';
     return NAVBAR_CATEGORY_ALIASES[q.toLowerCase()] ? '' : q;
   });
@@ -361,8 +367,17 @@ const Shop = () => {
   const [onSaleOnly, setOnSaleOnly] = useState(false);
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState(() => searchParams.get('sort') || 'featured');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [page, setPage] = useState(1);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  const setVisibleCount = () => setPage(1);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // Sync URL query params into local filter state when navigating from Navbar or Home
   useEffect(() => {
@@ -392,7 +407,7 @@ const Shop = () => {
       if (!paramCat) setActiveCategory('all');
       setSearchTerm(paramSearch);
     }
-    setVisibleCount(PAGE_SIZE);
+    setPage(1);
   }, [searchParams, categories, user]);
 
   useEffect(() => {
@@ -405,7 +420,7 @@ const Shop = () => {
 
   useEffect(() => {
     if (!user) {
-      setRecommendedIds([]);
+      setRecommendedProducts([]);
       return;
     }
     let cancelled = false;
@@ -413,7 +428,7 @@ const Shop = () => {
       try {
         const res = await api.products.getRecommended(48);
         if (!cancelled) {
-          setRecommendedIds((res?.products || []).map((p) => String(p._id || p.id)));
+          setRecommendedProducts(res?.products || []);
         }
       } catch {
         // Non-blocking fallback
@@ -425,25 +440,17 @@ const Shop = () => {
     };
   }, [user?._id, user?.id, userPrefsKey]);
 
+  // Load categories once (server attaches accurate productCount per category via Redis cache)
   useEffect(() => {
     let isMounted = true;
-    const loadCatalog = async () => {
-      setLoading(true);
-      try {
-        const [prodRes, catRes] = await Promise.all([
-          api.products.getAll({ limit: 1200 }),
-          api.categories.getAll(),
-        ]);
-        if (!isMounted) return;
-        setAllProducts(prodRes.products || []);
-        setCategories(catRes.categories || []);
-      } catch (err) {
-        console.error('Failed to load catalog:', err.message);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-    loadCatalog();
+    api.categories
+      .getAll()
+      .then((catRes) => {
+        if (isMounted) setCategories(catRes.categories || []);
+      })
+      .catch((err) => {
+        console.error('Failed to load categories:', err.message);
+      });
     return () => {
       isMounted = false;
     };
@@ -451,14 +458,17 @@ const Shop = () => {
 
   const categoryCounts = useMemo(() => {
     const counts = {};
-    allProducts.forEach((p) => {
-      const catId = String(p.category?._id || p.categoryId?._id || p.categoryId || '');
-      if (catId) {
-        counts[catId] = (counts[catId] || 0) + 1;
-      }
+    categories.forEach((c) => {
+      const cid = String(c._id || c.id || '');
+      if (cid) counts[cid] = Number(c.productCount) || 0;
     });
     return counts;
-  }, [allProducts]);
+  }, [categories]);
+
+  const totalCatalogCount = useMemo(
+    () => categories.reduce((sum, c) => sum + (Number(c.productCount) || 0), 0),
+    [categories]
+  );
 
   const activeCategoryObj = useMemo(
     () => categories.find((c) => String(c._id || c.id) === String(activeCategory)),
@@ -470,102 +480,125 @@ const Shop = () => {
     [priceRangeId]
   );
 
-  const filteredProducts = useMemo(() => {
-    let list = [...allProducts];
+  // Server-side filtered & paginated catalog query
+  useEffect(() => {
+    let cancelled = false;
 
-    if (activeCategory !== 'all') {
-      list = list.filter((p) => {
-        const catId = String(p.category?._id || p.categoryId?._id || p.categoryId || '');
-        return catId === String(activeCategory);
-      });
-    }
+    const mapSortToServer = (s) => {
+      if (s === 'price-asc') return 'price_asc';
+      if (s === 'price-desc') return 'price_desc';
+      if (s === 'rating-desc') return 'rating_desc';
+      return undefined;
+    };
 
-    if (searchTerm.trim()) {
-      const q = searchTerm.trim().toLowerCase();
-      list = list.filter((p) => {
-        const name = (p.name || '').toLowerCase();
-        const desc = (p.description || '').toLowerCase();
-        const cat = getDisplayCategoryName(
-          p.category?.name || p.categoryId?.name || ''
-        ).toLowerCase();
-        return name.includes(q) || desc.includes(q) || cat.includes(q);
-      });
-    }
+    const fetchProductsPage = async () => {
+      if (page === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
 
-    if (selectedPriceRange.id !== 'all') {
-      list = list.filter(
-        (p) => p.price >= selectedPriceRange.min && p.price <= selectedPriceRange.max
-      );
-    }
+      try {
+        const isPureRecommendedMode =
+          sortBy === 'recommended' &&
+          user &&
+          activeCategory === 'all' &&
+          !debouncedSearch &&
+          selectedPriceRange.id === 'all' &&
+          !inStockOnly &&
+          !onSaleOnly &&
+          minRating === 0;
 
-    if (inStockOnly) {
-      list = list.filter((p) => (p.stock ?? 0) > 0);
-    }
+        if (isPureRecommendedMode && recommendedProducts.length > 0) {
+          if (!cancelled) {
+            setProducts(recommendedProducts.slice(0, page * PAGE_SIZE));
+            setTotalProducts(recommendedProducts.length);
+          }
+          return;
+        }
 
-    if (onSaleOnly) {
-      list = list.filter((p) => Boolean(p.originalPrice && p.originalPrice > p.price));
-    }
+        const res = await api.products.getAll({
+          page,
+          limit: PAGE_SIZE,
+          categoryId: activeCategory !== 'all' ? activeCategory : undefined,
+          search: debouncedSearch || undefined,
+          minPrice: selectedPriceRange.id !== 'all' ? selectedPriceRange.min : undefined,
+          maxPrice:
+            selectedPriceRange.id !== 'all' && Number.isFinite(selectedPriceRange.max)
+              ? selectedPriceRange.max
+              : undefined,
+          inStock: inStockOnly ? 'true' : undefined,
+          minRating: minRating > 0 ? minRating : undefined,
+          sort: mapSortToServer(sortBy),
+        });
 
-    if (minRating > 0) {
-      list = list.filter((p) => (p.rating || 0) >= minRating);
-    }
+        if (cancelled) return;
+        const incoming = res.products || [];
 
-    if (sortBy === 'recommended' && user) {
-      const rankMap = new Map(recommendedIds.map((pid, idx) => [pid, idx]));
-      const prefSet = new Set((user.preferredCategories || []).map((c) => String(c?._id || c)));
-      list.sort((a, b) => {
-        const idA = String(a._id || a.id);
-        const idB = String(b._id || b.id);
-        const rankA = rankMap.has(idA) ? rankMap.get(idA) : Infinity;
-        const rankB = rankMap.has(idB) ? rankMap.get(idB) : Infinity;
-        if (rankA !== rankB) return rankA - rankB;
+        if (page === 1) {
+          setProducts(incoming);
+        } else {
+          setProducts((prev) => {
+            const seen = new Set(prev.map((item) => String(item._id || item.id)));
+            const uniqueNext = incoming.filter((item) => !seen.has(String(item._id || item.id)));
+            return [...prev, ...uniqueNext];
+          });
+        }
+        setTotalProducts(res.totalProducts || 0);
+      } catch (err) {
+        if (!cancelled) console.error('Failed to load catalog page:', err.message);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    };
 
-        const catA = String(a.category?._id || a.categoryId?._id || a.categoryId || '');
-        const catB = String(b.category?._id || b.categoryId?._id || b.categoryId || '');
-        const prefA = prefSet.has(catA) ? 1 : 0;
-        const prefB = prefSet.has(catB) ? 1 : 0;
-        if (prefB !== prefA) return prefB - prefA;
-
-        const scoreA = (a.rating || 0) + (a.originalPrice > a.price ? 0.4 : 0);
-        const scoreB = (b.rating || 0) + (b.originalPrice > b.price ? 0.4 : 0);
-        return scoreB - scoreA;
-      });
-    } else if (sortBy === 'price-asc') {
-      list.sort((a, b) => (a.price || 0) - (b.price || 0));
-    } else if (sortBy === 'price-desc') {
-      list.sort((a, b) => (b.price || 0) - (a.price || 0));
-    } else if (sortBy === 'rating-desc') {
-      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    } else if (sortBy === 'discount-desc') {
-      const calcDisc = (p) =>
-        p.originalPrice && p.originalPrice > p.price
-          ? (p.originalPrice - p.price) / p.originalPrice
-          : 0;
-      list.sort((a, b) => calcDisc(b) - calcDisc(a));
-    } else {
-      list.sort((a, b) => {
-        const scoreA = (a.rating || 0) + (a.originalPrice > a.price ? 0.4 : 0);
-        const scoreB = (b.rating || 0) + (b.originalPrice > b.price ? 0.4 : 0);
-        return scoreB - scoreA;
-      });
-    }
-
-    return list;
+    fetchProductsPage();
+    return () => {
+      cancelled = true;
+    };
   }, [
-    allProducts,
+    page,
     activeCategory,
-    searchTerm,
+    debouncedSearch,
     selectedPriceRange,
     inStockOnly,
     onSaleOnly,
     minRating,
     sortBy,
     user,
-    recommendedIds,
+    recommendedProducts,
   ]);
 
-  const visibleProducts = filteredProducts.slice(0, visibleCount);
-  const hasMore = visibleCount < filteredProducts.length;
+  const visibleProducts = useMemo(() => {
+    let list = onSaleOnly
+      ? products.filter((p) => Boolean(p.originalPrice && p.originalPrice > p.price))
+      : products;
+
+    if (sortBy === 'recommended' && user && recommendedProducts.length > 0) {
+      const rankMap = new Map(
+        recommendedProducts.map((item, idx) => [String(item._id || item.id), idx])
+      );
+      list = [...list].sort((a, b) => {
+        const rankA = rankMap.has(String(a._id || a.id)) ? rankMap.get(String(a._id || a.id)) : Infinity;
+        const rankB = rankMap.has(String(b._id || b.id)) ? rankMap.get(String(b._id || b.id)) : Infinity;
+        return rankA - rankB;
+      });
+    } else if (sortBy === 'discount-desc') {
+      const calcDisc = (p) =>
+        p.originalPrice && p.originalPrice > p.price
+          ? (p.originalPrice - p.price) / p.originalPrice
+          : 0;
+      list = [...list].sort((a, b) => calcDisc(b) - calcDisc(a));
+    }
+
+    return list;
+  }, [products, onSaleOnly, sortBy, user, recommendedProducts]);
+
+  const filteredProducts = visibleProducts;
+  const hasMore = !onSaleOnly && products.length < totalProducts;
 
   const updateUrlParams = (nextCat, nextSearch) => {
     const next = new URLSearchParams();
@@ -826,7 +859,7 @@ const Shop = () => {
                 {pageTitle}
               </h1>
               <span style={{ fontSize: '13.5px', color: 'var(--text-muted)', fontWeight: '600' }}>
-                {loading ? 'Loading...' : `${filteredProducts.length} items`}
+                {loading ? 'Loading...' : `${onSaleOnly ? visibleProducts.length : totalProducts} items`}
               </span>
             </div>
           </div>
@@ -929,7 +962,10 @@ const Shop = () => {
 
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(e) => {
+                setSortBy(e.target.value);
+                setPage(1);
+              }}
               aria-label="Sort products"
               className="shop-sort-select"
             >
@@ -1021,7 +1057,7 @@ const Shop = () => {
                 >
                   <span>All Categories</span>
                   <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {allProducts.length}
+                    {totalCatalogCount}
                   </span>
                 </button>
 
@@ -1335,7 +1371,8 @@ const Shop = () => {
                   <div style={{ display: 'flex', justifyContent: 'center', marginTop: '36px' }}>
                     <button
                       type="button"
-                      onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                      disabled={loadingMore}
+                      onClick={() => setPage((prev) => prev + 1)}
                       style={{
                         height: '44px',
                         padding: '0 28px',
@@ -1345,10 +1382,13 @@ const Shop = () => {
                         color: 'var(--text-primary)',
                         fontSize: '13.5px',
                         fontWeight: '700',
-                        cursor: 'pointer',
+                        cursor: loadingMore ? 'wait' : 'pointer',
+                        opacity: loadingMore ? 0.7 : 1,
                       }}
                     >
-                      Load More Products ({filteredProducts.length - visibleCount} remaining)
+                      {loadingMore
+                        ? 'Loading more...'
+                        : `Load More Products (${Math.max(0, totalProducts - products.length)} remaining)`}
                     </button>
                   </div>
                 )}

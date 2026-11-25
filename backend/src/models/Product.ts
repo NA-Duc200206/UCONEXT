@@ -38,4 +38,9 @@ const ProductSchema = new Schema<IProduct>({
   timestamps: true
 });
 
+ProductSchema.index({ isDeleted: 1, categoryId: 1, price: 1 });
+ProductSchema.index({ isDeleted: 1, createdAt: -1 });
+ProductSchema.index({ isDeleted: 1, stock: 1 });
+ProductSchema.index({ name: 1 });
+
 export const Product = model<IProduct>('Product', ProductSchema);

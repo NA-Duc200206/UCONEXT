@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Review } from '../models/Review';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
+import { cacheService } from '../utils/cache';
 
 const MAX_REVIEW_COMMENT_LENGTH = 2000;
 
@@ -93,6 +94,7 @@ export const reviewService = {
       existing.comment = cleanComment;
       existing.isDeleted = false;
       await existing.save();
+      await cacheService.invalidateByPrefix('cache:products:');
       return existing;
     }
 
@@ -103,6 +105,7 @@ export const reviewService = {
       comment: cleanComment,
     } as any);
 
+    await cacheService.invalidateByPrefix('cache:products:');
     return review;
   },
 
@@ -122,6 +125,7 @@ export const reviewService = {
 
     review.isDeleted = true;
     await review.save();
+    await cacheService.invalidateByPrefix('cache:products:');
     return true;
   },
 };
