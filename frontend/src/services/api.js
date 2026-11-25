@@ -216,9 +216,19 @@ export const api = {
     verifyPayment: (queryParamsString) => request(`/payment/verify-payment?${queryParamsString}`),
   },
 
-  // Analytics
+  // Analytics & Audit Logs
   analytics: {
     getDashboardStats: () => request('/analytics/dashboard'),
+    getAuditLogs: (params = {}) => {
+      const query = new URLSearchParams();
+      Object.keys(params).forEach((key) => {
+        if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+          query.append(key, params[key]);
+        }
+      });
+      const qs = query.toString();
+      return request(`/analytics/audit-logs${qs ? `?${qs}` : ''}`);
+    },
   },
 
   // Reviews

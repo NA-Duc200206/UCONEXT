@@ -3,6 +3,8 @@ import { Order, Product, Coupon } from '../models';
 import { emitOrderEvent } from '../config/socket';
 import { emailService } from './emailService';
 import { couponService } from './couponService';
+import { cacheService } from '../utils/cache';
+import { auditService } from './auditService';
 
 function createOrderError(message: string, statusCode = 400) {
   const error: any = new Error(message);
@@ -181,6 +183,7 @@ export const orderService = {
         id: obj._id,
       };
 
+      await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
       emitOrderEvent('order:created', result);
       if (populatedOrder && (populatedOrder as any).userId?.email) {
         emailService.sendOrderConfirmation({
@@ -258,7 +261,13 @@ export const orderService = {
     });
   },
 
-  async updateOrderStatus(id: string, status?: string, paymentStatus?: string) {
+  async updateOrderStatus(
+    id: string,
+    status?: string,
+    paymentStatus?: string,
+    actorId?: string,
+    ipAddress?: string
+  ) {
     if (!Types.ObjectId.isValid(id)) {
       throw createOrderError('Order does not exist.', 404);
     }
@@ -269,6 +278,7 @@ export const orderService = {
     }
 
     const previousStatus = order.status;
+    const previousPaymentStatus = order.paymentStatus;
     const isRestockedState = (s: string) => s === 'cancelled' || s === 'refund_completed';
 
     if (status) {
@@ -305,6 +315,16 @@ export const orderService = {
     }
 
     await order.save();
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+    await auditService.record({
+      userId: actorId,
+      action: 'ORDER_STATUS_UPDATE',
+      targetType: 'Order',
+      targetId: String(order._id),
+      oldValue: { status: previousStatus, paymentStatus: previousPaymentStatus },
+      newValue: { status: order.status, paymentStatus: order.paymentStatus },
+      ipAddress,
+    });
 
     const populatedOrder = await Order.findById(id)
       .populate('userId', 'name email')
@@ -375,6 +395,7 @@ export const orderService = {
       id: obj._id,
     };
 
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
     emitOrderEvent('order:cancelled', result);
     if (populatedOrder && (populatedOrder as any).userId?.email) {
       emailService.sendOrderStatusUpdate((populatedOrder as any).userId.email, obj._id.toString(), 'cancelled');
@@ -406,9 +427,19 @@ export const orderService = {
       ? `Refund requested by customer: ${cleanReason}`
       : 'Refund requested by customer.';
 
+    const previousRefundBaseStatus = order.status;
     order.status = 'refund_requested';
     order.statusHistory.push({ status: 'refund_requested', timestamp: new Date(), note });
     await order.save();
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+    await auditService.record({
+      userId,
+      action: 'ORDER_REFUND_REQUEST',
+      targetType: 'Order',
+      targetId: String(order._id),
+      oldValue: { status: previousRefundBaseStatus },
+      newValue: { status: 'refund_requested', reason: cleanReason || '' },
+    });
 
     const populatedOrder = await Order.findById(id)
       .populate('userId', 'name email')

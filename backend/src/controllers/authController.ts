@@ -204,11 +204,11 @@ export const authController = {
     }
   },
 
-  async updateUserRole(req: Request, res: Response) {
+  async updateUserRole(req: any, res: Response) {
     try {
       const id = req.params.id as string;
       const { role } = req.body;
-      const user = await authService.updateUserRole(id, role);
+      const user = await authService.updateUserRole(id, role, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'User role updated successfully.', user });
     } catch (error: any) {
       return res.status(error.statusCode || 400).json({

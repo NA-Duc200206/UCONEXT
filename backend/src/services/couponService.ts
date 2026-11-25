@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Coupon, Order } from '../models';
+import { auditService } from './auditService';
 
 function createCouponError(message: string, statusCode = 400) {
   const error: any = new Error(message);
@@ -59,6 +60,7 @@ export const couponService = {
     const now = new Date();
     return Coupon.find({
       isDeleted: false,
+      isActive: { $ne: false },
       startDate: { $lte: now },
       endDate: { $gte: now },
       $expr: { $lt: ['$usedCount', '$usageLimit'] }
@@ -80,6 +82,10 @@ export const couponService = {
 
     if (!coupon) {
       throw createCouponError('Coupon code does not exist or has been removed.', 404);
+    }
+
+    if (coupon.isActive === false) {
+      throw createCouponError('This coupon is currently paused.', 400);
     }
 
     const now = new Date();
@@ -152,9 +158,10 @@ export const couponService = {
     return Coupon.find({ isDeleted: false }).sort({ createdAt: -1 });
   },
 
-  async create(data: any) {
+  async create(data: any, actorId?: string, ipAddress?: string) {
     const {
       code,
+      description,
       discountType,
       discountValue,
       minOrderAmount,
@@ -162,7 +169,8 @@ export const couponService = {
       startDate,
       endDate,
       usageLimit,
-      perUserLimit
+      perUserLimit,
+      isActive,
     } = data || {};
 
     if (!code || !discountType || discountValue === undefined) {
@@ -197,8 +205,9 @@ export const couponService = {
       throw createCouponError('A coupon with this code already exists.', 400);
     }
 
-    return Coupon.create({
+    const created = await Coupon.create({
       code: cleanCode,
+      description: typeof description === 'string' ? description.trim() : undefined,
       discountType,
       discountValue: parsedDiscountValue,
       minOrderAmount: parsedMinOrder,
@@ -206,11 +215,23 @@ export const couponService = {
       startDate: parsedStart,
       endDate: parsedEnd,
       usageLimit: parsedUsageLimit,
-      perUserLimit: parsedPerUserLimit
+      perUserLimit: parsedPerUserLimit,
+      isActive: isActive !== false,
     });
+
+    await auditService.record({
+      userId: actorId,
+      action: 'COUPON_CREATE',
+      targetType: 'Coupon',
+      targetId: String(created._id),
+      newValue: { code: created.code, discountType: created.discountType, discountValue: created.discountValue },
+      ipAddress,
+    });
+
+    return created;
   },
 
-  async update(id: string, data: any) {
+  async update(id: string, data: any, actorId?: string, ipAddress?: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw createCouponError('Coupon not found.', 404);
     }
@@ -219,7 +240,15 @@ export const couponService = {
       throw createCouponError('Coupon not found.', 404);
     }
 
+    const oldSnapshot = {
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      isActive: coupon.isActive,
+    };
+
     if (data.code) coupon.code = String(data.code).trim().toUpperCase();
+    if (data.description !== undefined) coupon.description = String(data.description || '').trim();
     if (data.discountType) coupon.discountType = data.discountType;
     if (data.discountValue !== undefined) coupon.discountValue = Number(data.discountValue);
     if (data.minOrderAmount !== undefined) coupon.minOrderAmount = Number(data.minOrderAmount);
@@ -230,6 +259,7 @@ export const couponService = {
     if (data.endDate) coupon.endDate = new Date(data.endDate);
     if (data.usageLimit !== undefined) coupon.usageLimit = Number(data.usageLimit);
     if (data.perUserLimit !== undefined) coupon.perUserLimit = Number(data.perUserLimit);
+    if (typeof data.isActive === 'boolean') coupon.isActive = data.isActive;
 
     assertValidCouponValues({
       discountType: coupon.discountType,
@@ -243,10 +273,24 @@ export const couponService = {
     });
 
     await coupon.save();
+    await auditService.record({
+      userId: actorId,
+      action: 'COUPON_UPDATE',
+      targetType: 'Coupon',
+      targetId: String(coupon._id),
+      oldValue: oldSnapshot,
+      newValue: {
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        isActive: coupon.isActive,
+      },
+      ipAddress,
+    });
     return coupon;
   },
 
-  async delete(id: string) {
+  async delete(id: string, actorId?: string, ipAddress?: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw createCouponError('Coupon not found.', 404);
     }
@@ -256,6 +300,14 @@ export const couponService = {
     }
     coupon.isDeleted = true;
     await coupon.save();
+    await auditService.record({
+      userId: actorId,
+      action: 'COUPON_DELETE',
+      targetType: 'Coupon',
+      targetId: String(coupon._id),
+      oldValue: { code: coupon.code },
+      ipAddress,
+    });
     return true;
   }
 };

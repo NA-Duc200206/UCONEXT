@@ -87,17 +87,13 @@ const Navbar = () => {
     let isMounted = true;
     const loadNavCategories = async () => {
       try {
-        const [catRes, prodRes] = await Promise.all([
-          api.categories.getAll(),
-          api.products.getAll({ limit: 100 }),
-        ]);
+        const catRes = await api.categories.getAll();
         if (!isMounted) return;
         const cats = catRes.categories || [];
-        const prods = prodRes.products || [];
         const counts = {};
-        prods.forEach((p) => {
-          const cid = String(p.category?._id || p.categoryId?._id || p.categoryId || '');
-          if (cid) counts[cid] = (counts[cid] || 0) + 1;
+        cats.forEach((c) => {
+          const cid = String(c._id || c.id || '');
+          if (cid) counts[cid] = Number(c.productCount) || 0;
         });
         setCategories(cats);
         setCategoryCounts(counts);
@@ -839,6 +835,24 @@ const Navbar = () => {
           </div>
 
           {/* User Auth Info / Buttons */}
+          {user?.role === 'admin' && (
+            <Link
+              to="/admin"
+              className="desktop-nav"
+              style={{
+                padding: '6px 12px',
+                borderRadius: '999px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                color: '#2454F4',
+                background: isDark ? 'rgba(36, 84, 244, 0.16)' : 'rgba(36, 84, 244, 0.08)',
+                border: '1px solid rgba(36, 84, 244, 0.3)',
+              }}
+            >
+              Admin
+            </Link>
+          )}
           {user ? (
             <Link
               to="/settings"

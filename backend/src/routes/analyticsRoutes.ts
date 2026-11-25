@@ -5,5 +5,6 @@ import { authenticateToken, isAdmin } from '../middleware/auth';
 const router = Router();
 
 router.get('/dashboard', authenticateToken, isAdmin, analyticsController.getDashboard);
+router.get('/audit-logs', authenticateToken, isAdmin, analyticsController.getAuditLogs);
 
 export default router;

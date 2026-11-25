@@ -39,9 +39,9 @@ export const couponController = {
     }
   },
 
-  async create(req: Request, res: Response) {
+  async create(req: any, res: Response) {
     try {
-      const coupon = await couponService.create(req.body);
+      const coupon = await couponService.create(req.body, req.user?._id?.toString(), req.ip);
       return res.status(201).json({ message: 'Coupon created successfully.', coupon });
     } catch (error: any) {
       return res.status(error.statusCode || 400).json({
@@ -51,10 +51,10 @@ export const couponController = {
     }
   },
 
-  async update(req: Request, res: Response) {
+  async update(req: any, res: Response) {
     try {
       const id = req.params.id as string;
-      const coupon = await couponService.update(id, req.body);
+      const coupon = await couponService.update(id, req.body, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Coupon updated successfully.', coupon });
     } catch (error: any) {
       return res.status(error.statusCode || 400).json({
@@ -64,10 +64,10 @@ export const couponController = {
     }
   },
 
-  async delete(req: Request, res: Response) {
+  async delete(req: any, res: Response) {
     try {
       const id = req.params.id as string;
-      await couponService.delete(id);
+      await couponService.delete(id, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Coupon deleted successfully.' });
     } catch (error: any) {
       return res.status(error.statusCode || 400).json({

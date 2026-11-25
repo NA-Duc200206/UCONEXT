@@ -32,9 +32,11 @@ const Wishlist = React.lazy(() => import('./pages/Wishlist'));
 const Settings = React.lazy(() => import('./pages/Settings'));
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 const AdminProducts = React.lazy(() => import('./pages/AdminProducts'));
+const AdminCategories = React.lazy(() => import('./pages/AdminCategories'));
 const AdminOrders = React.lazy(() => import('./pages/AdminOrders'));
 const AdminUsers = React.lazy(() => import('./pages/AdminUsers'));
 const AdminCoupons = React.lazy(() => import('./pages/AdminCoupons'));
+const AdminAuditLogs = React.lazy(() => import('./pages/AdminAuditLogs'));
 
 const PageLoaderFallback = () => (
   <div
@@ -112,9 +114,11 @@ const AppContent = () => {
                 {/* Admin Routes */}
                 <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboard /></RouteGuard>} />
                 <Route path="/admin/products" element={<RouteGuard requireAdmin><AdminProducts /></RouteGuard>} />
+                <Route path="/admin/categories" element={<RouteGuard requireAdmin><AdminCategories /></RouteGuard>} />
                 <Route path="/admin/orders" element={<RouteGuard requireAdmin><AdminOrders /></RouteGuard>} />
                 <Route path="/admin/users" element={<RouteGuard requireAdmin><AdminUsers /></RouteGuard>} />
                 <Route path="/admin/coupons" element={<RouteGuard requireAdmin><AdminCoupons /></RouteGuard>} />
+                <Route path="/admin/audit-logs" element={<RouteGuard requireAdmin><AdminAuditLogs /></RouteGuard>} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

@@ -70,4 +70,7 @@ const OrderSchema = new Schema<IOrder>({
   timestamps: true
 });
 
+OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ status: 1, paymentStatus: 1, createdAt: -1 });
+
 export const Order = model<IOrder>('Order', OrderSchema);

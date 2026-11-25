@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { DashboardSkeleton } from '../components/SkeletonLoader';
+import AdminNav from '../components/AdminNav';
 import { formatVND } from '../utils/formatters';
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { DollarSign, ShoppingCart, Users, Package, ArrowRight, Eye, LayoutDashboard, ShoppingBag, Ticket } from 'lucide-react';
@@ -90,29 +91,14 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-page-container">
+      <AdminNav />
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
           <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span className="ui-icon-box-lg"><LayoutDashboard size={20} strokeWidth={1.75} /></span> Admin Dashboard
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Welcome admin, {user?.name}</p>
-        </div>
-
-        {/* Navigation Quick Links */}
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <Link to="/admin/products" className="btn btn-secondary">
-            <ShoppingBag size={16} /> Products
-          </Link>
-          <Link to="/admin/orders" className="btn btn-primary" style={{ background: 'var(--brand)', color: '#ffffff' }}>
-            <ShoppingCart size={16} /> Orders
-          </Link>
-          <Link to="/admin/users" className="btn btn-secondary">
-            <Users size={16} /> Users
-          </Link>
-          <Link to="/admin/coupons" className="btn btn-secondary">
-            <Ticket size={16} /> Coupons
-          </Link>
         </div>
       </div>
 
@@ -176,7 +162,7 @@ const AdminDashboard = () => {
                       <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
                   <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} />
                   <YAxis yAxisId="left" stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${val/1000000}M`} />
                   <YAxis yAxisId="right" orientation="right" stroke="var(--text-muted)" fontSize={11} />
@@ -202,7 +188,7 @@ const AdminDashboard = () => {
                       <stop offset="95%" stopColor="var(--color-accent)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
                   <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} />
                   <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${val/1000000}M`} />
                   <Tooltip
@@ -214,7 +200,7 @@ const AdminDashboard = () => {
                 </AreaChart>
               ) : (
                 <LineChart data={composedData} margin={{ top: 10, right: -5, left: -5, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
                   <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} />
                   <YAxis stroke="var(--text-muted)" fontSize={11} />
                   <Tooltip
@@ -234,7 +220,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Auxiliary Charts Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px', marginBottom: '40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap: '30px', marginBottom: '40px' }}>
         
         {/* Order Status Distribution (Donut Chart) */}
         <div className="admin-surface" style={{ padding: '24px', height: '400px', display: 'flex', flexDirection: 'column' }}>
@@ -292,7 +278,7 @@ const AdminDashboard = () => {
             {bestSellersData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={bestSellersData} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" horizontal={false} />
                   <XAxis type="number" stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${val/1000000}M`} />
                   <YAxis type="category" dataKey="name" stroke="var(--text-muted)" fontSize={11} width={80} />
                   <Tooltip

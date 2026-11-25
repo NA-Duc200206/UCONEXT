@@ -3,8 +3,9 @@ import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Eye, DollarSign, ShoppingBag, Package, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Eye, DollarSign, ShoppingBag, Package, AlertTriangle, Search } from 'lucide-react';
 import { formatVND, getSafeImageUrl, handleImageError } from '../utils/formatters';
+import AdminNav from '../components/AdminNav';
 
 const AdminProducts = () => {
   const { isAdmin } = useAuth();
@@ -19,11 +20,15 @@ const AdminProducts = () => {
   const [metrics, setMetrics] = useState({
     totalRevenue: 0,
     activeOrders: 0,
-    lowStockCount: 0
+    lowStockCount: 0,
+    totalProducts: 0,
+    pendingOrders: 0
   });
 
-  // Selection states
+  // Selection & filter states
   const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   // Pagination states
   const [page, setPage] = useState(1);
@@ -71,33 +76,38 @@ const AdminProducts = () => {
       navigate('/');
       return;
     }
-    loadData();
-  }, [isAdmin, page]);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [isAdmin, page, searchQuery, categoryFilter]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Load categories
-      const catRes = await api.categories.getAll();
-      setCategories(catRes.categories || []);
+      const [catRes, prodRes, statsRes] = await Promise.all([
+        api.categories.getAll(),
+        api.products.getAll({
+          page,
+          limit: 10,
+          search: searchQuery.trim() || undefined,
+          categoryId: categoryFilter || undefined,
+        }),
+        api.analytics.getDashboardStats(),
+      ]);
 
-      // 2. Load products
-      const prodRes = await api.products.getAll({ page, limit: 7 });
+      setCategories(catRes.categories || []);
       setProducts(prodRes.products || []);
       setTotalPages(prodRes.totalPages || 1);
-
-      // 3. Load analytics metrics for top summary cards
-      const statsRes = await api.analytics.getDashboardStats();
-      const rawProducts = prodRes.products || [];
-      const lowStockList = rawProducts.filter(p => p.stock <= 10);
 
       setMetrics({
         totalRevenue: statsRes.stats?.totalRevenue || 0,
         activeOrders: statsRes.stats?.totalOrders || 0,
-        lowStockCount: lowStockList.length
+        lowStockCount: statsRes.stats?.lowStockCount ?? 0,
+        totalProducts: statsRes.stats?.totalProducts ?? prodRes.totalProducts ?? 0,
+        pendingOrders: statsRes.stats?.statusCounts?.pending || 0,
       });
 
-      // Clear row selection on page change
       setSelectedProductIds([]);
     } catch (err) {
       showToast(err.message || 'Failed to load data.', 'error');
@@ -213,15 +223,17 @@ const AdminProducts = () => {
   return (
     <div className="admin-page-container">
       
-      {/* Header and Back Link */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
+      <AdminNav />
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <Link to="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }} className="back-link">
-            <ChevronLeft size={14} /> Back to Dashboard
-          </Link>
-          <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h1 style={{ fontSize: '30px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
             <span className="ui-icon-box-lg"><Package size={20} strokeWidth={1.75} /></span> Product Inventory
           </h1>
+          <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)' }}>
+            Manage catalog listings, pricing, variants, and stock levels ({metrics.totalProducts} active products).
+          </p>
         </div>
         <button onClick={openAddModal} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Plus size={16} /> Add New Product
@@ -229,17 +241,15 @@ const AdminProducts = () => {
       </div>
 
       {/* Top Section: Row of 3 Metric Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '40px' }}>
-        
-        {/* Metric Card 1: Revenue */}
-        <div className="admin-surface" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '28px' }}>
+        <div className="admin-surface" style={{ padding: '22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>TOTAL INVENTORY REVENUE</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>NET REVENUE</span>
             <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
               {formatVND(metrics.totalRevenue)}
             </span>
-            <span style={{ fontSize: '12px', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
-              <TrendingUp size={12} /> +12.5% <span style={{ color: 'var(--text-muted)', fontWeight: '400' }}>vs last month</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Paid & non-refunded orders
             </span>
           </div>
           <div className="ui-icon-box-lg">
@@ -247,15 +257,14 @@ const AdminProducts = () => {
           </div>
         </div>
 
-        {/* Metric Card 2: Active Orders */}
-        <div className="admin-surface" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="admin-surface" style={{ padding: '22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>SYSTEM ORDERS</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>TOTAL ORDERS</span>
             <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
               {metrics.activeOrders} orders
             </span>
-            <span style={{ fontSize: '12px', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
-              <TrendingUp size={12} /> +8.2% <span style={{ color: 'var(--text-muted)', fontWeight: '400' }}>vs yesterday</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              {metrics.pendingOrders} awaiting confirmation
             </span>
           </div>
           <div className="ui-icon-box-lg">
@@ -263,22 +272,61 @@ const AdminProducts = () => {
           </div>
         </div>
 
-        {/* Metric Card 3: Stock Alerts */}
-        <div className="admin-surface" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="admin-surface" style={{ padding: '22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>LOW STOCK ALERTS</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: '600' }}>LOW STOCK ALERTS (≤ 10)</span>
             <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
               {metrics.lowStockCount} products
             </span>
             <span style={{ fontSize: '12px', color: metrics.lowStockCount > 0 ? '#f59e0b' : 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
-              <AlertTriangle size={12} /> {metrics.lowStockCount > 0 ? 'Restock Needed' : 'Safe'}
+              <AlertTriangle size={12} /> {metrics.lowStockCount > 0 ? 'Restock Needed Across Catalog' : 'Healthy Stock'}
             </span>
           </div>
           <div className="ui-icon-box-lg">
             <AlertTriangle size={20} strokeWidth={1.75} color={metrics.lowStockCount > 0 ? 'var(--color-warning)' : 'var(--text-primary)'} />
           </div>
         </div>
+      </div>
 
+      {/* Search & Category Filter Bar */}
+      <div className="admin-surface" style={{ padding: '14px 20px', marginBottom: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 260px' }}>
+          <Search size={16} color="var(--text-muted)" />
+          <input
+            type="search"
+            aria-label="Search inventory products"
+            placeholder="Search products by name..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
+            style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '14px' }}
+          />
+        </div>
+        <select
+          aria-label="Filter by category"
+          value={categoryFilter}
+          onChange={(e) => {
+            setCategoryFilter(e.target.value);
+            setPage(1);
+          }}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: '1px solid var(--glass-border)',
+            background: 'var(--input-bg)',
+            color: 'var(--text-primary)',
+            fontSize: '13px',
+          }}
+        >
+          <option value="">All Categories</option>
+          {categories.map((c) => (
+            <option key={c.id || c._id} value={c.id || c._id}>
+              {c.name} ({c.productCount ?? 0})
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Bottom Section: Comprehensive Product Inventory Table */}
@@ -447,7 +495,7 @@ const AdminProducts = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'var(--modal-backdrop)',
+          background: 'rgba(0, 0, 0, 0.7)',
           backdropFilter: 'blur(10px)',
           display: 'flex',
           justifyContent: 'center',
