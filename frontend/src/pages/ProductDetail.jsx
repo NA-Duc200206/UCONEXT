@@ -746,8 +746,25 @@ const ProductDetail = () => {
                                 {(rev.user?.name || 'C').charAt(0).toUpperCase()}
                               </div>
                               <span className="pd-author-name">
-                                {rev.user?.name || 'Verified Customer'}
+                                {rev.user?.name || 'Customer'}
                               </span>
+                              {rev.verifiedPurchase && (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: 'var(--color-success, #10b981)',
+                                    background: 'rgba(16, 185, 129, 0.12)',
+                                    border: '1px solid rgba(16, 185, 129, 0.28)',
+                                  }}
+                                >
+                                  Verified Purchase
+                                </span>
+                              )}
                             </div>
 
                             <div className="pd-review-meta">

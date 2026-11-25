@@ -13,6 +13,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import AIFloatingChat from './components/AIFloatingChat';
 import RouteGuard from './components/RouteGuard';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Primary Storefront Pages (Eager)
 import Home from './pages/Home';
@@ -92,31 +93,33 @@ const AppContent = () => {
       
       <main style={{ flex: 1, position: 'relative', zIndex: 1 }}>
         <div key={location.pathname} className="page-transition-container">
-          <React.Suspense fallback={<PageLoaderFallback />}>
-            <Routes location={location}>
-              <Route path="/" element={<Home />} />
-              <Route path="/products" element={<Shop />} />
-              <Route path="/product/:id" element={<ProductDetail />} />
-              <Route path="/cart" element={<Cart />} />
-              <Route path="/payment-result" element={<PaymentResult />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/orders" element={<MyOrders />} />
-              <Route path="/wishlist" element={<Wishlist />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/profile" element={<Settings />} />
-              
-              {/* Admin Routes */}
-              <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboard /></RouteGuard>} />
-              <Route path="/admin/products" element={<RouteGuard requireAdmin><AdminProducts /></RouteGuard>} />
-              <Route path="/admin/orders" element={<RouteGuard requireAdmin><AdminOrders /></RouteGuard>} />
-              <Route path="/admin/users" element={<RouteGuard requireAdmin><AdminUsers /></RouteGuard>} />
-              <Route path="/admin/coupons" element={<RouteGuard requireAdmin><AdminCoupons /></RouteGuard>} />
+          <ErrorBoundary>
+            <React.Suspense fallback={<PageLoaderFallback />}>
+              <Routes location={location}>
+                <Route path="/" element={<Home />} />
+                <Route path="/products" element={<Shop />} />
+                <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/cart" element={<Cart />} />
+                <Route path="/payment-result" element={<PaymentResult />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/orders" element={<RouteGuard><MyOrders /></RouteGuard>} />
+                <Route path="/wishlist" element={<RouteGuard><Wishlist /></RouteGuard>} />
+                <Route path="/settings" element={<RouteGuard><Settings /></RouteGuard>} />
+                <Route path="/profile" element={<RouteGuard><Settings /></RouteGuard>} />
+                
+                {/* Admin Routes */}
+                <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboard /></RouteGuard>} />
+                <Route path="/admin/products" element={<RouteGuard requireAdmin><AdminProducts /></RouteGuard>} />
+                <Route path="/admin/orders" element={<RouteGuard requireAdmin><AdminOrders /></RouteGuard>} />
+                <Route path="/admin/users" element={<RouteGuard requireAdmin><AdminUsers /></RouteGuard>} />
+                <Route path="/admin/coupons" element={<RouteGuard requireAdmin><AdminCoupons /></RouteGuard>} />
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </React.Suspense>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </React.Suspense>
+          </ErrorBoundary>
         </div>
       </main>
 

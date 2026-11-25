@@ -12,7 +12,8 @@ import { Server } from 'socket.io';
 import { connectDB } from './config/db';
 import { connectRedis, redisClient } from './config/redis';
 import { seedDatabase } from './config/seed';
-import { setIO } from './config/socket';
+import { configureSocketAuth, setIO } from './config/socket';
+import { orderService } from './services/orderService';
 import {
   isOriginAllowed,
   parseAllowedOrigins,
@@ -123,16 +124,12 @@ const io = new Server(server, {
   }
 });
 setIO(io);
-
-io.on('connection', (socket) => {
-  console.log('⚡ Socket connected:', socket.id);
-  socket.on('disconnect', () => {
-    console.log('⚡ Socket disconnected:', socket.id);
-  });
-});
+configureSocketAuth(io);
 
 // Expose Socket.io instance for other services
 export { io };
+
+let vnpayExpiryInterval: NodeJS.Timeout | null = null;
 
 // Boot Server
 const bootServer = async () => {
@@ -151,6 +148,13 @@ const bootServer = async () => {
       console.log('ℹ️ Skipping automatic database seed (disabled in production unless AUTO_SEED=true).');
     }
 
+    vnpayExpiryInterval = setInterval(() => {
+      orderService.expireStaleVnpayOrders().catch((err) => {
+        console.error('Failed to expire stale VNPAY orders:', err?.message || err);
+      });
+    }, 60_000);
+    vnpayExpiryInterval.unref();
+
     server.listen(PORT, () => {
       console.log(`✔ Server is running on http://localhost:${PORT}`);
     });
@@ -162,6 +166,10 @@ const bootServer = async () => {
 
 const shutdown = async (signal: string) => {
   console.log(`\n⏳ Received ${signal}. Shutting down gracefully...`);
+  if (vnpayExpiryInterval) {
+    clearInterval(vnpayExpiryInterval);
+    vnpayExpiryInterval = null;
+  }
   server.close(async () => {
     try {
       await mongoose.disconnect();

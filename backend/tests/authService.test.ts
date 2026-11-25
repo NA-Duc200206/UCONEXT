@@ -4,6 +4,14 @@ import { User } from '../src/models';
 import { authService } from '../src/services/authService';
 import { emailService } from '../src/services/emailService';
 
+const mockVerifyIdToken = vi.fn();
+
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({
+    verifyIdToken: (...args: any[]) => mockVerifyIdToken(...args),
+  }),
+}));
+
 describe('authService', () => {
   beforeAll(async () => {
     await connectTestDB();
@@ -73,6 +81,10 @@ describe('authService', () => {
     });
     expect(ok).toBe(true);
 
+    // Existing refresh sessions must be revoked upon password change
+    const freshWithTokens = await User.findById(user.id).select('+refreshTokens');
+    expect(freshWithTokens?.refreshTokens).toHaveLength(0);
+
     await expect(authService.login('alice@uconext.test', 'StrongPass1', '127.0.0.1')).rejects.toMatchObject({
       statusCode: 400,
     });
@@ -125,6 +137,22 @@ describe('authService', () => {
     // New password works for login
     const loggedIn = await authService.login('alice@uconext.test', 'RecoveredPass9', '127.0.0.1');
     expect(loggedIn.token).toBeTruthy();
+  });
+
+  it('prevents Firebase login from hijacking an existing account when email_verified is false', async () => {
+    await authService.register('Victim Admin', 'victim@uconext.test', 'StrongPass1', '127.0.0.1');
+
+    process.env.FIREBASE_PROJECT_ID = 'uconext-test-project';
+    mockVerifyIdToken.mockResolvedValueOnce({
+      uid: 'attacker-firebase-uid',
+      email: 'victim@uconext.test',
+      email_verified: false,
+      firebase: { sign_in_provider: 'password' },
+    });
+
+    await expect(authService.loginWithFirebase('mock-unverified-token', '127.0.0.1')).rejects.toMatchObject({
+      statusCode: 403,
+    });
   });
 });
 

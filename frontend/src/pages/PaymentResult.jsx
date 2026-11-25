@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useCart } from '../context/CartContext';
 import { Check, X, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const PaymentResult = () => {
   const [searchParams] = useSearchParams();
   const { showToast } = useToast();
+  const { restoreCartIfEmpty } = useCart();
   
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('pending'); // 'success' | 'failed' | 'cod_success'
@@ -42,9 +44,26 @@ const PaymentResult = () => {
   };
 
   useEffect(() => {
+    const restorePendingVnpayCart = async () => {
+      try {
+        const rawSnapshot = sessionStorage.getItem('uconext_pending_vnpay_cart');
+        if (rawSnapshot) {
+          sessionStorage.removeItem('uconext_pending_vnpay_cart');
+          const parsed = JSON.parse(rawSnapshot);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            await restoreCartIfEmpty(parsed);
+          }
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    };
+
     const verifyVnpay = async () => {
       // 1. Case: COD success redirection
       if (searchParams.get('method') === 'cod') {
+        const codOrderId = searchParams.get('orderId');
+        if (codOrderId) setOrderId(codOrderId);
         setStatus('cod_success');
         setLoading(false);
         triggerConfetti();
@@ -56,18 +75,21 @@ const PaymentResult = () => {
         try {
           const res = await api.payments.verifyPayment(searchParams.toString());
           if (res.success) {
+            sessionStorage.removeItem('uconext_pending_vnpay_cart');
             setStatus('success');
             setOrderId(res.orderId);
             setMessage(res.message);
             triggerConfetti();
             showToast('Payment successful!', 'success');
           } else {
+            await restorePendingVnpayCart();
             setStatus('failed');
             setOrderId(res.orderId);
             setMessage(res.message || 'Payment unsuccessful.');
-            showToast('Payment failed.', 'error');
+            showToast('Payment failed. Your cart items have been restored.', 'error');
           }
         } catch (error) {
+          await restorePendingVnpayCart();
           setStatus('failed');
           setMessage(error.message || 'Transaction digital signature verification failed.');
           showToast('Payment verification error.', 'error');

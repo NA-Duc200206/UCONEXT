@@ -336,7 +336,7 @@ export const authService = {
       throw error;
     }
 
-    const userWithPassword = await User.findById(userDoc._id).select('+password');
+    const userWithPassword = await User.findById(userDoc._id).select('+password +refreshTokens');
     if (!userWithPassword) {
       const error: any = new Error('User not found.');
       error.statusCode = 404;
@@ -352,6 +352,7 @@ export const authService = {
 
     const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     userWithPassword.password = await bcrypt.hash(newPassword, salt);
+    userWithPassword.refreshTokens = [];
     await userWithPassword.save();
 
     try {
@@ -805,14 +806,30 @@ export const authService = {
       throw error;
     }
 
-    const queryOr: any[] = [{ firebaseUid: decoded.uid }];
-    if (normalizedEmail) queryOr.push({ email: normalizedEmail });
-    if (phone) queryOr.push({ phone });
-
-    let user = await User.findOne({ $or: queryOr }).select('+refreshTokens');
+    let user = await User.findOne({ firebaseUid: decoded.uid }).select('+refreshTokens');
     let auditAction = 'SOCIAL_LOGIN';
 
+    if (!user && normalizedEmail) {
+      const emailMatch = await User.findOne({ email: normalizedEmail }).select('+refreshTokens');
+      if (emailMatch) {
+        if (decoded.email_verified !== true) {
+          throw createHttpError(
+            'Email address from social provider is not verified and cannot be linked to an existing account.',
+            403
+          );
+        }
+        user = emailMatch;
+      }
+    }
+
+    if (!user && phone) {
+      user = await User.findOne({ phone }).select('+refreshTokens');
+    }
+
     if (!user) {
+      if (normalizedEmail && decoded.email_verified === false) {
+        throw createHttpError('Please verify your social account email address before signing in.', 403);
+      }
       auditAction = 'SOCIAL_REGISTER';
       const fallbackEmail = normalizedEmail || `${decoded.uid}@phone.uconext.local`;
       user = await User.create({
