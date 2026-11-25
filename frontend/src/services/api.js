@@ -34,7 +34,7 @@ async function refreshAccessToken() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
-      const data = await response.json();
+      const data = await parseJsonResponse(response);
       if (!response.ok || !data?.token) {
         clearAuthStorage();
         return null;
@@ -56,9 +56,30 @@ async function refreshAccessToken() {
   return refreshPromise;
 }
 
-/**
- * Helper to make HTTP requests with JSON body and JWT headers
- */
+async function parseJsonResponse(response) {
+  const contentType = response.headers?.get?.('content-type') || '';
+  if (contentType && !contentType.toLowerCase().includes('application/json')) {
+    const rawText = await response.text().catch(() => '');
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return {
+        message: response.ok
+          ? 'Unexpected server response format.'
+          : `Server unavailable (HTTP ${response.status}).`,
+      };
+    }
+  }
+  try {
+    return await response.json();
+  } catch {
+    return {
+      message: response.ok
+        ? 'Unexpected empty response.'
+        : `Request failed (HTTP ${response.status}).`,
+    };
+  }
+}
 async function request(endpoint, { method = 'GET', body = null, token = null, _retry = false } = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -89,7 +110,7 @@ async function request(endpoint, { method = 'GET', body = null, token = null, _r
       }
     }
 
-    const data = await response.json();
+    const data = await parseJsonResponse(response);
 
     if (!response.ok) {
       const err = new Error(data.message || 'An unexpected error occurred.');
@@ -124,7 +145,7 @@ async function uploadImageFile(endpoint, file, _retry = false) {
     }
   }
 
-  const data = await res.json();
+  const data = await parseJsonResponse(res);
   if (!res.ok) throw new Error(data.message || 'Image upload failed');
   return data;
 }
