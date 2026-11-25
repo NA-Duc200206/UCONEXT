@@ -41,20 +41,23 @@ describe('security & production config', () => {
     expect(validateProductionEnv({ NODE_ENV: 'development' })).toEqual([]);
 
     const missing = validateProductionEnv({ NODE_ENV: 'production' });
-    expect(missing).toHaveLength(3);
+    expect(missing.length).toBeGreaterThanOrEqual(4);
 
     const placeholderSecret = validateProductionEnv({
       NODE_ENV: 'production',
       MONGODB_URI: 'mongodb+srv://cluster.example/uconext',
-      JWT_SECRET: 'your_jwt_secret_key_here',
+      JWT_SECRET: 'a_very_strong_random_production_secret_key_2026',
+      JWT_REFRESH_SECRET: 'your_jwt_refresh_secret_key_here',
+      VNPAY_HASH_SECRET: 'HJGBUYTREWQLKJHGFDSAZXCVBNMKIOP',
       CLIENT_URL: 'https://uconext.com',
     });
-    expect(placeholderSecret).toHaveLength(1);
+    expect(placeholderSecret).toHaveLength(2);
 
     const valid = validateProductionEnv({
       NODE_ENV: 'production',
       MONGODB_URI: 'mongodb+srv://cluster.example/uconext',
       JWT_SECRET: 'a_very_strong_random_production_secret_key_2026',
+      JWT_REFRESH_SECRET: 'another_strong_random_refresh_secret_key_2026',
       CLIENT_URL: 'https://uconext.com',
     });
     expect(valid).toEqual([]);

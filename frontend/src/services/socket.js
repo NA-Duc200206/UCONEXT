@@ -1,27 +1,44 @@
 import { io } from 'socket.io-client';
 
-// Connect to current origin; Vite proxy or production server handles /socket.io
 let socket = null;
+let lastAuthToken = null;
 
 export const getSocket = () => {
+  const currentToken = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+
+  if (socket && lastAuthToken !== currentToken) {
+    socket.disconnect();
+    socket = null;
+  }
+
   if (!socket) {
+    lastAuthToken = currentToken;
     socket = io(window.location.origin, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    });
-
-    socket.on('connect', () => {
-      console.log('⚡ Connected to real-time server via Socket.io');
-    });
-
-    socket.on('disconnect', () => {
-      console.log('⚡ Disconnected from real-time server');
+      reconnectionDelay: 1000,
+      auth: (cb) => {
+        const latestToken = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        cb({ token: latestToken });
+      },
     });
   }
+
   return socket;
 };
+
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+    lastAuthToken = null;
+  }
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('uconext:auth-expired', disconnectSocket);
+}
 
 export const subscribeToEvent = (event, callback) => {
   const s = getSocket();
@@ -30,4 +47,3 @@ export const subscribeToEvent = (event, callback) => {
     s.off(event, callback);
   };
 };
-

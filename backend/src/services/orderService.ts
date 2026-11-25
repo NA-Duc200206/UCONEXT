@@ -1,109 +1,206 @@
+import { Types } from 'mongoose';
 import { Order, Product, Coupon } from '../models';
-import { emitEvent } from '../config/socket';
+import { emitOrderEvent } from '../config/socket';
 import { emailService } from './emailService';
 import { couponService } from './couponService';
+import { cacheService } from '../utils/cache';
+import { auditService } from './auditService';
+
+function createOrderError(message: string, statusCode = 400) {
+  const error: any = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+const DEFAULT_VNPAY_RESERVATION_MS = 15 * 60 * 1000;
 
 export const orderService = {
-  async createOrder(userId: string, data: { items: any[]; shippingAddress: any; paymentMethod?: string; couponCode?: string }) {
-    const { items, shippingAddress, paymentMethod, couponCode } = data;
+  async createOrder(
+    userId: string,
+    data: { items: any[]; shippingAddress: any; paymentMethod?: string; couponCode?: string }
+  ) {
+    const { items, shippingAddress, paymentMethod, couponCode } = data || ({} as any);
 
-    if (!items || items.length === 0) {
-      const error: any = new Error('Your cart is empty.');
-      error.statusCode = 400;
-      throw error;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw createOrderError('Your cart is empty.', 400);
     }
-    if (!shippingAddress) {
-      const error: any = new Error('Shipping address is required.');
-      error.statusCode = 400;
-      throw error;
+
+    const normalizedAddress =
+      typeof shippingAddress === 'object' && shippingAddress !== null
+        ? JSON.stringify(shippingAddress)
+        : typeof shippingAddress === 'string'
+          ? shippingAddress.trim()
+          : '';
+    if (!normalizedAddress || normalizedAddress === '{}') {
+      throw createOrderError('Shipping address is required.', 400);
+    }
+
+    const normalizedMethod = paymentMethod === 'vnpay' ? 'vnpay' : 'cod';
+
+    // Validate item shapes & aggregate total quantity per productId across variants
+    const qtyByProductId = new Map<string, number>();
+    for (const item of items) {
+      const pid = String(item?.productId || '').trim();
+      if (!Types.ObjectId.isValid(pid)) {
+        throw createOrderError('Invalid product identifier in cart.', 400);
+      }
+
+      const rawQty = typeof item?.quantity === 'string' && item.quantity.trim() !== ''
+        ? Number(item.quantity)
+        : item?.quantity;
+      if (typeof rawQty !== 'number' || !Number.isInteger(rawQty) || rawQty < 1) {
+        throw createOrderError('Item quantity must be a positive integer.', 400);
+      }
+
+      qtyByProductId.set(pid, (qtyByProductId.get(pid) || 0) + rawQty);
+    }
+
+    const uniqueProductIds = Array.from(qtyByProductId.keys());
+    const products = await Product.find({
+      _id: { $in: uniqueProductIds },
+      isDeleted: { $ne: true },
+    });
+    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+
+    for (const [pid, totalRequestedQty] of qtyByProductId.entries()) {
+      const product = productMap.get(pid);
+      if (!product) {
+        throw createOrderError('Product not found.', 400);
+      }
+      if (product.stock < totalRequestedQty) {
+        throw createOrderError(
+          `Product "${product.name}" has insufficient stock (available: ${product.stock}).`,
+          400
+        );
+      }
     }
 
     let subtotal = 0;
-    const orderItems = [];
-
-    for (const item of items) {
-      const product = await Product.findById(item.productId);
-      if (!product) {
-        const error: any = new Error('Product not found.');
-        error.statusCode = 400;
-        throw error;
-      }
-      if (product.stock < item.quantity) {
-        const error: any = new Error(`Product "${product.name}" has insufficient stock (available: ${product.stock}).`);
-        error.statusCode = 400;
-        throw error;
-      }
-
+    const orderItems = items.map((item) => {
+      const pid = String(item.productId).trim();
+      const product = productMap.get(pid)!;
+      const itemQuantity = Number(item.quantity);
       const itemPrice = product.price;
-      const itemQuantity = parseInt(item.quantity.toString());
       subtotal += itemPrice * itemQuantity;
 
-      orderItems.push({
+      return {
         productId: product._id,
         name: product.name,
         price: itemPrice,
         image: product.image,
         quantity: itemQuantity,
         color: item.color || undefined,
-        size: item.size || undefined
-      });
-    }
+        size: item.size || undefined,
+      };
+    });
 
-    // Apply Coupon if supplied (reuse couponService so validation & perUserLimit match 100%)
+    // Validate & atomically reserve coupon usage if supplied
     let discountAmount = 0;
     let appliedCoupon: string | undefined = undefined;
+    let reservedCouponId: any = null;
+
     if (couponCode) {
       const validation = await couponService.validateCoupon(couponCode, subtotal, userId);
+      const reservedCoupon = await Coupon.findOneAndUpdate(
+        {
+          _id: validation.coupon.id,
+          isDeleted: false,
+          $expr: { $lt: ['$usedCount', '$usageLimit'] },
+        },
+        { $inc: { usedCount: 1 } },
+        { returnDocument: 'after' }
+      );
+
+      if (!reservedCoupon) {
+        throw createOrderError('Coupon usage limit has been reached.', 400);
+      }
+
       discountAmount = validation.discountAmount;
       appliedCoupon = validation.code;
-      await Coupon.findByIdAndUpdate(validation.coupon.id, { $inc: { usedCount: 1 } });
+      reservedCouponId = reservedCoupon._id;
     }
 
     const shippingFee = subtotal > 1000000 ? 0 : 30000;
     const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
 
-    // Deduct stock
-    for (const item of items) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
-    }
-
-    const order = await Order.create({
-      userId,
-      shippingAddress: typeof shippingAddress === 'object' ? JSON.stringify(shippingAddress) : shippingAddress,
-      paymentMethod: paymentMethod || 'cod',
-      paymentStatus: 'pending',
-      status: 'pending',
-      items: orderItems as any,
-      couponCode: appliedCoupon || undefined,
-      discountAmount,
-      totalAmount,
-      statusHistory: [{ status: 'pending', timestamp: new Date(), note: `Order placed successfully.${appliedCoupon ? ` (Coupon: ${appliedCoupon})` : ''}` }]
-    } as any);
-
-    const populatedOrder = await Order.findById(order._id)
-      .populate('userId', 'name email')
-      .populate('items.productId', 'name image');
-
-    const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
-    const result = {
-      ...obj,
-      id: obj._id
+    // Atomically deduct stock per unique product; roll back on any concurrent shortage or write failure
+    const deductedStock: Array<{ productId: string; qty: number }> = [];
+    const rollbackReservations = async () => {
+      for (const entry of deductedStock) {
+        await Product.findByIdAndUpdate(entry.productId, { $inc: { stock: entry.qty } });
+      }
+      if (reservedCouponId) {
+        await Coupon.updateOne({ _id: reservedCouponId, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
+      }
     };
 
-    // Real-time broadcast and email notification
-    emitEvent('order:created', result);
-    if (populatedOrder && (populatedOrder as any).userId?.email) {
-      emailService.sendOrderConfirmation({
-        orderId: obj._id.toString(),
-        customerEmail: (populatedOrder as any).userId.email,
-        customerName: (populatedOrder as any).userId.name || 'Valued Customer',
-        totalAmount: obj.totalAmount,
-        items: obj.items,
-        shippingAddress: obj.shippingAddress
-      });
-    }
+    try {
+      for (const [pid, totalQty] of qtyByProductId.entries()) {
+        const updatedProduct = await Product.findOneAndUpdate(
+          {
+            _id: pid,
+            isDeleted: { $ne: true },
+            stock: { $gte: totalQty },
+          },
+          { $inc: { stock: -totalQty } },
+          { returnDocument: 'after' }
+        );
 
-    return result;
+        if (!updatedProduct) {
+          const prodName = productMap.get(pid)?.name || 'Selected item';
+          throw createOrderError(`Product "${prodName}" has insufficient stock.`, 400);
+        }
+
+        deductedStock.push({ productId: pid, qty: totalQty });
+      }
+
+      const order = await Order.create({
+        userId,
+        shippingAddress: normalizedAddress,
+        paymentMethod: normalizedMethod,
+        paymentStatus: 'pending',
+        status: 'pending',
+        items: orderItems as any,
+        couponCode: appliedCoupon || undefined,
+        discountAmount,
+        totalAmount,
+        statusHistory: [
+          {
+            status: 'pending',
+            timestamp: new Date(),
+            note: `Order placed successfully.${appliedCoupon ? ` (Coupon: ${appliedCoupon})` : ''}`,
+          },
+        ],
+      } as any);
+
+      const populatedOrder = await Order.findById(order._id)
+        .populate('userId', 'name email')
+        .populate('items.productId', 'name image');
+
+      const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
+      const result = {
+        ...obj,
+        id: obj._id,
+      };
+
+      await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+      emitOrderEvent('order:created', result);
+      if (populatedOrder && (populatedOrder as any).userId?.email) {
+        emailService.sendOrderConfirmation({
+          orderId: obj._id.toString(),
+          customerEmail: (populatedOrder as any).userId.email,
+          customerName: (populatedOrder as any).userId.name || 'Valued Customer',
+          totalAmount: obj.totalAmount,
+          items: obj.items,
+          shippingAddress: obj.shippingAddress,
+        });
+      }
+
+      return result;
+    } catch (err) {
+      await rollbackReservations();
+      throw err;
+    }
   },
 
   async getMyOrders(userId: string) {
@@ -111,36 +208,40 @@ export const orderService = {
       .populate('items.productId', 'name image')
       .sort({ createdAt: -1 });
 
-    return orders.map(order => {
+    return orders.map((order) => {
       const obj = order.toObject();
       return {
         ...obj,
-        id: obj._id
+        id: obj._id,
       };
     });
   },
 
   async getOrderById(id: string, userId: string, userRole: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw createOrderError('Order does not exist.', 404);
+    }
+
     const order = await Order.findById(id)
       .populate('userId', 'name email')
       .populate('items.productId', 'name image');
 
     if (!order) {
-      const error: any = new Error('Order does not exist.');
-      error.statusCode = 404;
-      throw error;
+      throw createOrderError('Order does not exist.', 404);
     }
 
-    if (order.userId.toString() !== userId.toString() && userRole !== 'admin') {
-      const error: any = new Error('You do not have permission to view this order.');
-      error.statusCode = 403;
-      throw error;
+    const ownerId = (order.userId as any)?._id
+      ? (order.userId as any)._id.toString()
+      : order.userId.toString();
+
+    if (ownerId !== userId.toString() && userRole !== 'admin') {
+      throw createOrderError('You do not have permission to view this order.', 403);
     }
 
     const obj = order.toObject();
     return {
       ...obj,
-      id: obj._id
+      id: obj._id,
     };
   },
 
@@ -150,46 +251,60 @@ export const orderService = {
       .populate('items.productId', 'name image')
       .sort({ createdAt: -1 });
 
-    return orders.map(order => {
+    return orders.map((order) => {
       const obj = order.toObject();
       return {
         ...obj,
         id: obj._id,
-        user: obj.userId
+        user: obj.userId,
       };
     });
   },
 
-  async updateOrderStatus(id: string, status?: string, paymentStatus?: string) {
+  async updateOrderStatus(
+    id: string,
+    status?: string,
+    paymentStatus?: string,
+    actorId?: string,
+    ipAddress?: string
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw createOrderError('Order does not exist.', 404);
+    }
+
     const order = await Order.findById(id);
     if (!order) {
-      const error: any = new Error('Order does not exist.');
-      error.statusCode = 404;
-      throw error;
+      throw createOrderError('Order does not exist.', 404);
     }
 
     const previousStatus = order.status;
+    const previousPaymentStatus = order.paymentStatus;
+    const isRestockedState = (s: string) => s === 'cancelled' || s === 'refund_completed';
 
     if (status) {
       order.status = status as any;
-      order.statusHistory.push({ status: status as any, timestamp: new Date(), note: 'Status updated by Admin.' });
+      order.statusHistory.push({
+        status: status as any,
+        timestamp: new Date(),
+        note: 'Status updated by Admin.',
+      });
 
-      if (status === 'completed' || status === 'shipping') {
+      if (status === 'delivered' || status === 'completed') {
         order.paymentStatus = 'paid';
       }
 
-      if (status === 'cancelled' && previousStatus !== 'cancelled') {
+      if (!isRestockedState(previousStatus) && isRestockedState(status)) {
         for (const item of order.items) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
         }
-        if (order.couponCode) {
+        if (status === 'cancelled' && order.couponCode) {
           await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
         }
-      } else if (previousStatus === 'cancelled' && status !== 'cancelled') {
+      } else if (isRestockedState(previousStatus) && !isRestockedState(status)) {
         for (const item of order.items) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
         }
-        if (order.couponCode) {
+        if (previousStatus === 'cancelled' && order.couponCode) {
           await Coupon.updateOne({ code: order.couponCode }, { $inc: { usedCount: 1 } });
         }
       }
@@ -200,6 +315,16 @@ export const orderService = {
     }
 
     await order.save();
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+    await auditService.record({
+      userId: actorId,
+      action: 'ORDER_STATUS_UPDATE',
+      targetType: 'Order',
+      targetId: String(order._id),
+      oldValue: { status: previousStatus, paymentStatus: previousPaymentStatus },
+      newValue: { status: order.status, paymentStatus: order.paymentStatus },
+      ipAddress,
+    });
 
     const populatedOrder = await Order.findById(id)
       .populate('userId', 'name email')
@@ -209,10 +334,10 @@ export const orderService = {
     const result = {
       ...obj,
       id: obj._id,
-      user: obj.userId
+      user: obj.userId,
     };
 
-    emitEvent('order:updated', result);
+    emitOrderEvent('order:updated', result);
     if (populatedOrder && (populatedOrder as any).userId?.email && status) {
       emailService.sendOrderStatusUpdate((populatedOrder as any).userId.email, obj._id.toString(), status);
     }
@@ -221,50 +346,57 @@ export const orderService = {
   },
 
   async cancelOrder(id: string, userId: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw createOrderError('Order does not exist.', 404);
+    }
+
     const order = await Order.findById(id);
     if (!order) {
-      const error: any = new Error('Order does not exist.');
-      error.statusCode = 404;
-      throw error;
+      throw createOrderError('Order does not exist.', 404);
     }
 
     if (order.userId.toString() !== userId.toString()) {
-      const error: any = new Error('You do not have permission to cancel this order.');
-      error.statusCode = 403;
-      throw error;
+      throw createOrderError('You do not have permission to cancel this order.', 403);
     }
 
     if (order.status !== 'pending') {
-      const error: any = new Error(`Cannot cancel order in "${order.status}" status.`);
-      error.statusCode = 400;
-      throw error;
+      throw createOrderError(`Cannot cancel order in "${order.status}" status.`, 400);
     }
 
-    order.status = 'cancelled';
-    order.statusHistory.push({ status: 'cancelled', timestamp: new Date(), note: 'Order cancelled by customer.' });
+    const cancelledOrder = await Order.findOneAndUpdate(
+      { _id: id, status: 'pending' },
+      {
+        $set: { status: 'cancelled' },
+        $push: {
+          statusHistory: { status: 'cancelled', timestamp: new Date(), note: 'Order cancelled by customer.' },
+        },
+      },
+      { returnDocument: 'after' }
+    );
 
-    // Restock & restore coupon usage
-    for (const item of order.items) {
+    if (!cancelledOrder) {
+      throw createOrderError('Order can no longer be cancelled.', 400);
+    }
+
+    for (const item of cancelledOrder.items) {
       await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
     }
-    if (order.couponCode) {
-      await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
+    if (cancelledOrder.couponCode) {
+      await Coupon.updateOne({ code: cancelledOrder.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
     }
-
-    await order.save();
 
     const populatedOrder = await Order.findById(id)
       .populate('userId', 'name email')
       .populate('items.productId', 'name image');
 
-    const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
+    const obj = populatedOrder ? (populatedOrder as any).toObject() : cancelledOrder.toObject();
     const result = {
       ...obj,
-      id: obj._id
+      id: obj._id,
     };
 
-    // Real-time broadcast and email notification
-    emitEvent('order:cancelled', result);
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+    emitOrderEvent('order:cancelled', result);
     if (populatedOrder && (populatedOrder as any).userId?.email) {
       emailService.sendOrderStatusUpdate((populatedOrder as any).userId.email, obj._id.toString(), 'cancelled');
     }
@@ -273,33 +405,41 @@ export const orderService = {
   },
 
   async requestRefund(id: string, userId: string, reason?: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw createOrderError('Order does not exist.', 404);
+    }
+
     const order = await Order.findById(id);
     if (!order) {
-      const error: any = new Error('Order does not exist.');
-      error.statusCode = 404;
-      throw error;
+      throw createOrderError('Order does not exist.', 404);
     }
 
     if (order.userId.toString() !== userId.toString()) {
-      const error: any = new Error('You do not have permission to request a refund for this order.');
-      error.statusCode = 403;
-      throw error;
+      throw createOrderError('You do not have permission to request a refund for this order.', 403);
     }
 
     if (order.status !== 'delivered' && order.status !== 'completed') {
-      const error: any = new Error(`Cannot request refund for order in "${order.status}" status.`);
-      error.statusCode = 400;
-      throw error;
+      throw createOrderError(`Cannot request refund for order in "${order.status}" status.`, 400);
     }
 
-    const cleanReason = reason?.trim();
+    const cleanReason = reason?.trim().slice(0, 500);
     const note = cleanReason
       ? `Refund requested by customer: ${cleanReason}`
       : 'Refund requested by customer.';
 
+    const previousRefundBaseStatus = order.status;
     order.status = 'refund_requested';
     order.statusHistory.push({ status: 'refund_requested', timestamp: new Date(), note });
     await order.save();
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+    await auditService.record({
+      userId,
+      action: 'ORDER_REFUND_REQUEST',
+      targetType: 'Order',
+      targetId: String(order._id),
+      oldValue: { status: previousRefundBaseStatus },
+      newValue: { status: 'refund_requested', reason: cleanReason || '' },
+    });
 
     const populatedOrder = await Order.findById(id)
       .populate('userId', 'name email')
@@ -308,10 +448,62 @@ export const orderService = {
     const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
     const result = {
       ...obj,
-      id: obj._id
+      id: obj._id,
     };
 
-    emitEvent('order:updated', result);
+    emitOrderEvent('order:updated', result);
     return result;
-  }
+  },
+
+  async expireStaleVnpayOrders(maxAgeMs: number = DEFAULT_VNPAY_RESERVATION_MS): Promise<number> {
+    const cutoff = new Date(Date.now() - Math.max(60_000, maxAgeMs));
+    const candidates = await Order.find({
+      paymentMethod: 'vnpay',
+      status: 'pending',
+      paymentStatus: 'pending',
+      createdAt: { $lte: cutoff },
+    }).select('_id');
+
+    let expiredCount = 0;
+
+    for (const candidate of candidates) {
+      const expiredOrder = await Order.findOneAndUpdate(
+        {
+          _id: candidate._id,
+          paymentMethod: 'vnpay',
+          status: 'pending',
+          paymentStatus: 'pending',
+        },
+        {
+          $set: { status: 'cancelled', paymentStatus: 'failed' },
+          $push: {
+            statusHistory: {
+              status: 'cancelled',
+              timestamp: new Date(),
+              note: 'Order automatically cancelled after VNPAY payment reservation expired.',
+            },
+          },
+        },
+        { returnDocument: 'after' }
+      );
+
+      if (!expiredOrder) continue;
+      expiredCount += 1;
+
+      for (const item of expiredOrder.items) {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
+      }
+      if (expiredOrder.couponCode) {
+        await Coupon.updateOne({ code: expiredOrder.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
+      }
+
+      const populated = await Order.findById(expiredOrder._id)
+        .populate('userId', 'name email')
+        .populate('items.productId', 'name image');
+      const obj = populated ? (populated as any).toObject() : expiredOrder.toObject();
+      emitOrderEvent('order:cancelled', { ...obj, id: obj._id });
+    }
+
+    return expiredCount;
+  },
 };

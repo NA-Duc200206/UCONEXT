@@ -9,7 +9,12 @@ export const paymentController = {
                      req.connection?.remoteAddress ||
                      req.socket?.remoteAddress ||
                      '127.0.0.1';
-      const paymentUrl = await paymentService.createPaymentUrl(id, ipAddr as string);
+      const paymentUrl = await paymentService.createPaymentUrl(
+        id,
+        ipAddr as string,
+        req.user?._id?.toString(),
+        req.user?.role
+      );
       return res.status(200).json({ paymentUrl });
     } catch (error: any) {
       return res.status(error.statusCode || 500).json({

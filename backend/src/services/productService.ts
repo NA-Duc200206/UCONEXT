@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import { Product, Category, Order, Review } from '../models';
+import { cacheService, toSlug } from '../utils/cache';
+import { auditService } from './auditService';
 
 const REPEAT_PURCHASE_CATEGORIES = new Set([
   'Skincare',
@@ -13,23 +15,68 @@ export interface ProductQueryParams {
   categoryId?: string;
   minPrice?: string | number;
   maxPrice?: string | number;
+  inStock?: string | boolean;
+  minRating?: string | number;
   page?: string | number;
   limit?: string | number;
   sort?: string;
 }
 
+function escapeProductSearchRegex(raw: string): string {
+  return raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const productService = {
   async getAll(params: ProductQueryParams) {
-    const { search, categoryId, minPrice, maxPrice, page = '1', limit = '9', sort } = params;
+    const {
+      search,
+      categoryId,
+      minPrice,
+      maxPrice,
+      inStock,
+      minRating,
+      page = '1',
+      limit = '9',
+      sort,
+    } = params || {};
 
-    const query: any = {};
+    const parsedPage = parseInt(page.toString(), 10);
+    const parsedLimit = parseInt(limit.toString(), 10);
+    const pageNum = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
+    const limitNum = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 1200) : 9;
+    const parsedMinRating = minRating !== undefined ? parseFloat(String(minRating)) : 0;
+    const requireInStock = inStock === true || inStock === 'true' || inStock === '1';
+    const normalizedSort = String(sort || '').trim().toLowerCase();
 
-    if (search) {
-      query.name = { $regex: search.toString(), $options: 'i' };
+    const cacheKey = `cache:products:list:${JSON.stringify({
+      s: search ? String(search).trim().toLowerCase() : '',
+      c: categoryId || '',
+      minP: minPrice ?? '',
+      maxP: maxPrice ?? '',
+      stock: requireInStock ? 1 : 0,
+      minR: parsedMinRating > 0 ? parsedMinRating : 0,
+      p: pageNum,
+      l: limitNum,
+      sort: normalizedSort,
+    })}`;
+
+    const cachedResult = await cacheService.get<any>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
     }
 
-    const pageNum = parseInt(page.toString()) || 1;
-    const limitNum = parseInt(limit.toString()) || 9;
+    const query: any = { isDeleted: { $ne: true } };
+
+    if (search) {
+      const trimmedSearch = search.toString().trim().slice(0, 120);
+      if (trimmedSearch) {
+        query.name = { $regex: escapeProductSearchRegex(trimmedSearch), $options: 'i' };
+      }
+    }
+
+    if (requireInStock) {
+      query.stock = { $gt: 0 };
+    }
 
     if (categoryId) {
       const rawIds = typeof categoryId === 'string' && categoryId.includes(',')
@@ -48,21 +95,93 @@ export const productService = {
       query.categoryId = validIds.length > 1 ? { $in: validIds } : validIds[0];
     }
 
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = parseFloat(minPrice.toString());
-      if (maxPrice) query.price.$lte = parseFloat(maxPrice.toString());
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      const minVal = minPrice !== undefined && minPrice !== '' ? parseFloat(minPrice.toString()) : NaN;
+      const maxVal = maxPrice !== undefined && maxPrice !== '' ? parseFloat(maxPrice.toString()) : NaN;
+      if (Number.isFinite(minVal) || Number.isFinite(maxVal)) {
+        query.price = {};
+        if (Number.isFinite(minVal)) query.price.$gte = minVal;
+        if (Number.isFinite(maxVal)) query.price.$lte = maxVal;
+      }
+    }
+
+    const needsRatingFilterOrSort =
+      (Number.isFinite(parsedMinRating) && parsedMinRating > 0) ||
+      normalizedSort === 'rating_desc' ||
+      normalizedSort === 'rating-desc';
+
+    const skip = (pageNum - 1) * limitNum;
+
+    if (needsRatingFilterOrSort) {
+      const [allMatching, reviewStats] = await Promise.all([
+        Product.find(query).populate('categoryId', 'name slug'),
+        Review.aggregate([
+          { $match: { isDeleted: false } },
+          {
+            $group: {
+              _id: '$productId',
+              avgRating: { $avg: '$rating' },
+              reviewCount: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
+
+      const ratingMap = new Map<string, { rating: number; reviewCount: number }>(
+        reviewStats.map((r: any) => [
+          String(r._id),
+          { rating: Number(Number(r.avgRating || 0).toFixed(1)), reviewCount: Number(r.reviewCount) || 0 },
+        ])
+      );
+
+      let enriched = allMatching.map((p) => {
+        const obj = p.toObject();
+        const stats = ratingMap.get(String(obj._id)) || { rating: 0, reviewCount: 0 };
+        return {
+          ...obj,
+          id: obj._id,
+          category: obj.categoryId,
+          rating: stats.rating,
+          reviewCount: stats.reviewCount,
+        };
+      });
+
+      if (Number.isFinite(parsedMinRating) && parsedMinRating > 0) {
+        enriched = enriched.filter((item) => item.rating >= parsedMinRating);
+      }
+
+      if (normalizedSort === 'price_asc' || normalizedSort === 'price-asc') {
+        enriched.sort((a, b) => a.price - b.price);
+      } else if (normalizedSort === 'price_desc' || normalizedSort === 'price-desc') {
+        enriched.sort((a, b) => b.price - a.price);
+      } else if (normalizedSort === 'name_asc') {
+        enriched.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (normalizedSort === 'name_desc') {
+        enriched.sort((a, b) => b.name.localeCompare(a.name));
+      } else {
+        enriched.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount);
+      }
+
+      const totalProducts = enriched.length;
+      const totalPages = Math.ceil(totalProducts / limitNum);
+      const paged = enriched.slice(skip, skip + limitNum);
+
+      const responsePayload = {
+        products: paged,
+        totalProducts,
+        totalPages,
+        currentPage: pageNum,
+        limit: limitNum,
+      };
+      await cacheService.set(cacheKey, responsePayload, 60);
+      return responsePayload;
     }
 
     let sortOption: any = { createdAt: -1 };
-    if (sort) {
-      if (sort === 'price_asc') sortOption = { price: 1 };
-      else if (sort === 'price_desc') sortOption = { price: -1 };
-      else if (sort === 'name_asc') sortOption = { name: 1 };
-      else if (sort === 'name_desc') sortOption = { name: -1 };
-    }
-
-    const skip = (pageNum - 1) * limitNum;
+    if (normalizedSort === 'price_asc' || normalizedSort === 'price-asc') sortOption = { price: 1 };
+    else if (normalizedSort === 'price_desc' || normalizedSort === 'price-desc') sortOption = { price: -1 };
+    else if (normalizedSort === 'name_asc') sortOption = { name: 1 };
+    else if (normalizedSort === 'name_desc') sortOption = { name: -1 };
 
     const [products, totalProducts] = await Promise.all([
       Product.find(query)
@@ -73,28 +192,62 @@ export const productService = {
       Product.countDocuments(query)
     ]);
 
+    const pageIds = products.map((p) => p._id);
+    const pageReviewStats =
+      pageIds.length > 0
+        ? await Review.aggregate([
+            { $match: { productId: { $in: pageIds }, isDeleted: false } },
+            {
+              $group: {
+                _id: '$productId',
+                avgRating: { $avg: '$rating' },
+                reviewCount: { $sum: 1 },
+              },
+            },
+          ])
+        : [];
+
+    const pageRatingMap = new Map<string, { rating: number; reviewCount: number }>(
+      pageReviewStats.map((r: any) => [
+        String(r._id),
+        { rating: Number(Number(r.avgRating || 0).toFixed(1)), reviewCount: Number(r.reviewCount) || 0 },
+      ])
+    );
+
     const totalPages = Math.ceil(totalProducts / limitNum);
 
-    const formattedProducts = products.map(p => {
+    const formattedProducts = products.map((p) => {
       const obj = p.toObject();
+      const stats = pageRatingMap.get(String(obj._id)) || { rating: 0, reviewCount: 0 };
       return {
         ...obj,
         id: obj._id,
-        category: obj.categoryId
+        category: obj.categoryId,
+        rating: stats.rating,
+        reviewCount: stats.reviewCount,
       };
     });
 
-    return {
+    const responsePayload = {
       products: formattedProducts,
       totalProducts,
       totalPages,
       currentPage: pageNum,
       limit: limitNum
     };
+
+    await cacheService.set(cacheKey, responsePayload, 60);
+    return responsePayload;
   },
 
   async getById(id: string) {
-    const product = await Product.findById(id).populate('categoryId', 'name slug');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const error: any = new Error('Product does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const product = await Product.findOne({ _id: id, isDeleted: { $ne: true } }).populate('categoryId', 'name slug');
     if (!product) {
       const error: any = new Error('Product does not exist.');
       error.statusCode = 404;
@@ -109,19 +262,29 @@ export const productService = {
     };
   },
 
-  async create(data: {
-    name: string;
-    price: number;
-    stock: number;
-    description?: string;
-    image?: string;
-    options?: any;
-    categoryId: string;
-  }) {
+  async create(
+    data: {
+      name: string;
+      price: number;
+      stock: number;
+      description?: string;
+      image?: string;
+      options?: any;
+      categoryId: string;
+    },
+    actorId?: string,
+    ipAddress?: string
+  ) {
     const { name, price, stock, description, image, options, categoryId } = data;
 
     if (!name || price === undefined || stock === undefined || !categoryId) {
       const error: any = new Error('Please provide all required fields.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+      const error: any = new Error('Invalid category.');
       error.statusCode = 400;
       throw error;
     }
@@ -133,31 +296,60 @@ export const productService = {
       throw error;
     }
 
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const baseSlug = toSlug(name) || `product-${Date.now()}`;
+    const slugConflict = await Product.findOne({ slug: baseSlug });
+    const slug = slugConflict ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
 
     const product = await Product.create({
-      name,
+      name: name.trim(),
       slug,
-      price,
-      stock,
+      price: Number(price),
+      stock: Number(stock),
       description,
       image,
       options: options || { colors: [], sizes: [] },
       categoryId: categoryId as any
     });
 
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:categories:', 'cache:analytics:');
+    await auditService.record({
+      userId: actorId,
+      action: 'PRODUCT_CREATE',
+      targetType: 'Product',
+      targetId: String(product._id),
+      newValue: { name: product.name, price: product.price, stock: product.stock },
+      ipAddress,
+    });
+
     return product;
   },
 
-  async update(id: string, data: any) {
+  async update(id: string, data: any, actorId?: string, ipAddress?: string) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const error: any = new Error('Product does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
     const product = await Product.findById(id);
-    if (!product) {
+    if (!product || product.isDeleted) {
       const error: any = new Error('Product does not exist.');
       error.statusCode = 404;
       throw error;
     }
 
+    const oldSnapshot = {
+      name: product.name,
+      price: product.price,
+      stock: product.stock,
+      categoryId: String(product.categoryId),
+    };
+
     if (data.categoryId) {
+      if (!mongoose.Types.ObjectId.isValid(data.categoryId)) {
+        const error: any = new Error('Invalid category.');
+        error.statusCode = 400;
+        throw error;
+      }
       const category = await Category.findById(data.categoryId);
       if (!category) {
         const error: any = new Error('Invalid category.');
@@ -168,26 +360,62 @@ export const productService = {
     }
 
     if (data.name) {
-      product.name = data.name;
-      product.slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+      const nextName = String(data.name).trim();
+      const nextSlugBase = toSlug(nextName) || product.slug;
+      const conflict = await Product.findOne({ _id: { $ne: product._id } as any, slug: nextSlugBase });
+      product.name = nextName;
+      product.slug = conflict ? `${nextSlugBase}-${Date.now().toString(36)}` : nextSlugBase;
     }
-    if (data.price !== undefined) product.price = data.price;
-    if (data.stock !== undefined) product.stock = data.stock;
+    if (data.price !== undefined) product.price = Number(data.price);
+    if (data.stock !== undefined) product.stock = Number(data.stock);
     if (data.description !== undefined) product.description = data.description;
     if (data.image !== undefined) product.image = data.image;
     if (data.options !== undefined) product.options = data.options;
 
     await product.save();
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:categories:', 'cache:analytics:');
+    await auditService.record({
+      userId: actorId,
+      action: 'PRODUCT_UPDATE',
+      targetType: 'Product',
+      targetId: String(product._id),
+      oldValue: oldSnapshot,
+      newValue: {
+        name: product.name,
+        price: product.price,
+        stock: product.stock,
+        categoryId: String(product.categoryId),
+      },
+      ipAddress,
+    });
     return product;
   },
 
-  async delete(id: string) {
-    const product = await Product.findByIdAndDelete(id);
-    if (!product) {
+  async delete(id: string, actorId?: string, ipAddress?: string) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       const error: any = new Error('Product does not exist.');
       error.statusCode = 404;
       throw error;
     }
+    const product = await Product.findById(id);
+    if (!product || product.isDeleted) {
+      const error: any = new Error('Product does not exist.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    product.isDeleted = true;
+    await product.save();
+
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:categories:', 'cache:analytics:');
+    await auditService.record({
+      userId: actorId,
+      action: 'PRODUCT_DELETE',
+      targetType: 'Product',
+      targetId: String(product._id),
+      oldValue: { name: product.name, price: product.price, stock: product.stock },
+      ipAddress,
+    });
     return true;
   },
 

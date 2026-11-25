@@ -6,6 +6,8 @@ import { User, AuditLog, Category, Product } from '../models';
 import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { emailService } from './emailService';
+import { cacheService } from '../utils/cache';
+import { auditService } from './auditService';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const PHONE_REGEX = /^[0-9+\-\s()]{8,20}$/;
@@ -274,19 +276,41 @@ export const authService = {
     }));
   },
 
-  async updateUserRole(userId: string, role: string) {
+  async updateUserRole(userId: string, role: string, actorId?: string, ipAddress?: string) {
     const validRoles = ['customer', 'admin', 'warehouse', 'support'];
     if (!validRoles.includes(role)) {
       const error: any = new Error('Invalid role specified.');
       error.statusCode = 400;
       throw error;
     }
-    const user = await User.findByIdAndUpdate(userId, { role }, { new: true }).select('-password');
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      const error: any = new Error('User not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const existingUser = await User.findById(userId).select('role email');
+    if (!existingUser) {
+      const error: any = new Error('User not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const previousRole = existingUser.role;
+    const user = await User.findByIdAndUpdate(userId, { role }, { returnDocument: 'after' }).select('-password');
     if (!user) {
       const error: any = new Error('User not found.');
       error.statusCode = 404;
       throw error;
     }
+    await cacheService.invalidateByPrefix('cache:analytics:');
+    await auditService.record({
+      userId: actorId,
+      action: 'USER_ROLE_UPDATE',
+      targetType: 'User',
+      targetId: String(user._id),
+      oldValue: { role: previousRole, email: existingUser.email },
+      newValue: { role: user.role, email: user.email },
+      ipAddress,
+    });
     return {
       ...user.toObject(),
       id: user._id
@@ -336,7 +360,7 @@ export const authService = {
       throw error;
     }
 
-    const userWithPassword = await User.findById(userDoc._id).select('+password');
+    const userWithPassword = await User.findById(userDoc._id).select('+password +refreshTokens');
     if (!userWithPassword) {
       const error: any = new Error('User not found.');
       error.statusCode = 404;
@@ -352,6 +376,7 @@ export const authService = {
 
     const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     userWithPassword.password = await bcrypt.hash(newPassword, salt);
+    userWithPassword.refreshTokens = [];
     await userWithPassword.save();
 
     try {
@@ -805,14 +830,30 @@ export const authService = {
       throw error;
     }
 
-    const queryOr: any[] = [{ firebaseUid: decoded.uid }];
-    if (normalizedEmail) queryOr.push({ email: normalizedEmail });
-    if (phone) queryOr.push({ phone });
-
-    let user = await User.findOne({ $or: queryOr }).select('+refreshTokens');
+    let user = await User.findOne({ firebaseUid: decoded.uid }).select('+refreshTokens');
     let auditAction = 'SOCIAL_LOGIN';
 
+    if (!user && normalizedEmail) {
+      const emailMatch = await User.findOne({ email: normalizedEmail }).select('+refreshTokens');
+      if (emailMatch) {
+        if (decoded.email_verified !== true) {
+          throw createHttpError(
+            'Email address from social provider is not verified and cannot be linked to an existing account.',
+            403
+          );
+        }
+        user = emailMatch;
+      }
+    }
+
+    if (!user && phone) {
+      user = await User.findOne({ phone }).select('+refreshTokens');
+    }
+
     if (!user) {
+      if (normalizedEmail && decoded.email_verified === false) {
+        throw createHttpError('Please verify your social account email address before signing in.', 403);
+      }
       auditAction = 'SOCIAL_REGISTER';
       const fallbackEmail = normalizedEmail || `${decoded.uid}@phone.uconext.local`;
       user = await User.create({

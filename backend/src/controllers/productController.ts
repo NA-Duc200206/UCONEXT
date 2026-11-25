@@ -40,9 +40,9 @@ export const productController = {
     }
   },
 
-  async create(req: Request, res: Response) {
+  async create(req: any, res: Response) {
     try {
-      const product = await productService.create(req.body);
+      const product = await productService.create(req.body, req.user?._id?.toString(), req.ip);
       return res.status(201).json({ message: 'Product added successfully.', product });
     } catch (error: any) {
       return res.status(error.statusCode || 500).json({
@@ -52,10 +52,10 @@ export const productController = {
     }
   },
 
-  async update(req: Request, res: Response) {
+  async update(req: any, res: Response) {
     try {
       const id = req.params.id as string;
-      const product = await productService.update(id, req.body);
+      const product = await productService.update(id, req.body, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Product updated successfully.', product });
     } catch (error: any) {
       return res.status(error.statusCode || 500).json({
@@ -65,10 +65,10 @@ export const productController = {
     }
   },
 
-  async delete(req: Request, res: Response) {
+  async delete(req: any, res: Response) {
     try {
       const id = req.params.id as string;
-      await productService.delete(id);
+      await productService.delete(id, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Product deleted successfully.' });
     } catch (error: any) {
       return res.status(error.statusCode || 500).json({

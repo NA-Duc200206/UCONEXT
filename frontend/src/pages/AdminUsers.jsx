@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, Users, Search, Shield, UserCheck, Calendar } from 'lucide-react';
+import AdminNav from '../components/AdminNav';
 
 const AdminUsers = () => {
   const { user: currentUser, isAdmin } = useAuth();
@@ -79,22 +80,9 @@ const AdminUsers = () => {
 
   return (
     <div className="admin-page-container">
+      <AdminNav />
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <Link 
-          to="/admin" 
-          style={{ 
-            display: 'inline-flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            textDecoration: 'none', 
-            color: 'var(--text-secondary)', 
-            marginBottom: '16px', 
-            fontWeight: '600' 
-          }}
-        >
-          <ChevronLeft size={16} /> Back to Dashboard
-        </Link>
+      <div style={{ marginBottom: '28px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h1 style={{ fontSize: '28px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>

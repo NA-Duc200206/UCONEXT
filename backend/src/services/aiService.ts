@@ -76,6 +76,14 @@ export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export function sanitizePageContext(rawPage: unknown): string {
+  if (typeof rawPage !== 'string') return '';
+  const firstLine = rawPage.split(/[\r\n]+/)[0] || '';
+  const cleaned = firstLine.replace(/[\x00-\x1F\x7F`"<>|\\]+/g, ' ').trim().slice(0, 120);
+  if (!cleaned) return '';
+  return cleaned.startsWith('/') ? cleaned : `/${cleaned}`;
+}
+
 export function parseStrictJsonObject<T = any>(rawText: string): T {
   const trimmed = rawText.trim();
   const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -838,10 +846,11 @@ export const aiService = {
           .join(' | ')
       : 'Guest customer (not signed in).';
 
+    const safePage = sanitizePageContext(context.page);
     const currentPageInfo = currentProduct
       ? `Customer is currently viewing product: id="${String(currentProduct._id)}", name="${currentProduct.name}", category="${(currentProduct.categoryId as any)?.name || 'Product'}", price=${formatPriceVND(currentProduct.price)}, stock=${currentProduct.stock}.`
-      : context.page
-        ? `Customer is currently on page: ${context.page}`
+      : safePage
+        ? `Customer is currently on page: ${safePage}`
         : '';
 
     const prevProductsHint =

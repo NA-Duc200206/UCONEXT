@@ -55,6 +55,12 @@ const INSECURE_JWT_PLACEHOLDERS = new Set([
   'secret',
 ]);
 
+const INSECURE_VNPAY_PLACEHOLDERS = new Set([
+  'mock_hash_secret',
+  'HJGBUYTREWQLKJHGFDSAZXCVBNMKIOP',
+  'your_vnpay_hash_secret_here',
+]);
+
 export function validateProductionEnv(env: NodeJS.ProcessEnv = process.env): string[] {
   if (env.NODE_ENV !== 'production') {
     return [];
@@ -69,6 +75,20 @@ export function validateProductionEnv(env: NodeJS.ProcessEnv = process.env): str
   const jwtSecret = env.JWT_SECRET?.trim() || '';
   if (!jwtSecret || jwtSecret.length < 24 || INSECURE_JWT_PLACEHOLDERS.has(jwtSecret)) {
     issues.push('JWT_SECRET must be set to a strong secret (at least 24 characters) in production.');
+  }
+
+  const jwtRefreshSecret = env.JWT_REFRESH_SECRET?.trim() || '';
+  if (
+    !jwtRefreshSecret ||
+    jwtRefreshSecret.length < 24 ||
+    INSECURE_JWT_PLACEHOLDERS.has(jwtRefreshSecret)
+  ) {
+    issues.push('JWT_REFRESH_SECRET must be set to a strong secret (at least 24 characters) in production.');
+  }
+
+  const vnpaySecret = env.VNPAY_HASH_SECRET?.trim();
+  if (vnpaySecret && (vnpaySecret.length < 16 || INSECURE_VNPAY_PLACEHOLDERS.has(vnpaySecret))) {
+    issues.push('VNPAY_HASH_SECRET cannot use a public sandbox placeholder or weak secret in production.');
   }
 
   if (!env.CLIENT_URL?.trim() && !env.CORS_ORIGINS?.trim()) {
