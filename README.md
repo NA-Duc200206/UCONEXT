@@ -1,26 +1,26 @@
-# GlowStore Platform (Multi-Product Store)
+# UCONEXT Platform (Multi-Product E-Commerce Store)
 
-> Nền tảng thương mại điện tử Full-Stack (E-Commerce) đa sản phẩm, hỗ trợ quản lý sản phẩm, giỏ hàng, đặt hàng, cổng thanh toán VNPAY, thông báo thời gian thực và trang quản trị (Admin Dashboard).
+> Nền tảng thương mại điện tử Full-Stack (E-Commerce) đa danh mục mang thương hiệu **UCONEXT**, tích hợp AI Shopping Concierge, quản trị toàn diện (Admin Portal), thanh toán COD & VNPAY, bộ nhớ đệm Redis, thông báo thời gian thực qua Socket.IO và đóng gói sẵn sàng cho Docker.
 
 ---
 
 ## Tính Năng Nổi Bật
 
-- **Dành cho khách hàng:**
-  - Khám phá danh mục, tìm kiếm và lọc sản phẩm (giá, thương hiệu, danh mục, đánh giá).
-  - Chi tiết sản phẩm, biến thể (màu sắc, kích thước), đánh giá & bình luận.
-  - Giỏ hàng thông minh (Hybrid cart: đồng bộ giữa LocalStorage và Database).
-  - Đặt hàng & thanh toán (COD hoặc tích hợp sandbox VNPAY).
-  - Quản lý hồ sơ cá nhân, lịch sử đơn hàng, danh sách yêu thích (Wishlist).
-- **Dành cho quản trị viên (Admin):**
-  - Dashboard thống kê doanh thu, đơn hàng, khách hàng với biểu đồ trực quan.
-  - Quản lý danh mục, sản phẩm (CRUD, hình ảnh, tồn kho).
-  - Quản lý và cập nhật trạng thái đơn hàng (Timeline trạng thái).
-- **Hệ thống & Kỹ thuật:**
-  - Xác thực bảo mật với JWT (Access Token & Refresh Token Rotation).
-  - Tự động seed dữ liệu mẫu phong phú khi khởi động lần đầu.
-  - Thông báo thời gian thực (Real-time updates) qua Socket.io.
-  - Tối ưu hiệu năng và bảo mật (Helmet, CORS, Rate Limit, Redis caching).
+- **Trải nghiệm khách hàng (Storefront):**
+  - Giao diện Dual-Theme (Dark / Light) với 15 danh mục, ~1.000+ sản phẩm mẫu, lọc & phân trang phía server (giá, thương hiệu, danh mục, đánh giá, từ khóa).
+  - Giỏ hàng Hybrid đồng bộ mượt mà giữa `localStorage` và MongoDB, kiểm soát giới hạn tồn kho và khôi phục giỏ nếu giao dịch VNPAY thất bại.
+  - Đặt hàng & thanh toán COD hoặc VNPAY (xác thực chữ ký `timingSafeEqual`, đối khớp `vnp_Amount`/`vnpayTxnRef`, tự động hủy & hoàn kho đơn VNPAY treo quá 15 phút).
+  - Danh sách yêu thích (Wishlist), sản phẩm đã xem gần đây (Recently Viewed), đánh giá có nhãn *Verified Purchase*, quản lý địa chỉ & lịch sử đơn hàng.
+  - **AI Shopping Concierge & Review Insights:** hỗ trợ 7 nhà cung cấp LLM (`Gemini`, `OpenAI`, `Groq`, `OpenRouter`, `DeepSeek`, `Ollama`, `OpenAI-compatible`) kèm 7 công cụ truy vấn dữ liệu thật.
+- **Cổng quản trị (Admin Portal & RBAC):**
+  - Dashboard phân tích doanh thu ròng (loại trừ đơn hủy/hoàn tiền), đơn hàng và khách hàng với biểu đồ Recharts.
+  - Quản lý Sản phẩm (CRUD, upload ảnh raster an toàn, xóa mềm `isDeleted`), Danh mục (CRUD + chặn xóa danh mục còn sản phẩm), Mã giảm giá (tạo/sửa/bật-tắt `isActive`), Đơn hàng (lọc, tìm kiếm, phân trang, xử lý hoàn tiền) và Nhật ký quản trị (**Audit Logs**).
+- **Bảo mật, Hiệu năng & Vận hành:**
+  - Xác thực JWT + Refresh Token Rotation (băm SHA-256, tối đa 5 phiên, thu hồi khi đổi mật khẩu), đăng nhập Firebase/Google OAuth (yêu cầu `email_verified`), quên/đặt lại mật khẩu qua SMTP Nodemailer.
+  - Trừ tồn kho và tăng lượt dùng coupon nguyên tử (atomic updates) chống vượt bán (overselling).
+  - Socket.IO xác thực JWT phân tách room (`role:admin`, `user:<id>`).
+  - Redis cache cho danh mục/sản phẩm với cơ chế tự động xóa cache theo prefix khi ghi dữ liệu.
+  - Code-splitting frontend (`React.lazy` + vendor chunks), kiểm thử tự động Backend/Frontend và GitHub Actions CI.
 
 ---
 
@@ -28,10 +28,11 @@
 
 | Thành phần | Công nghệ |
 | :--- | :--- |
-| **Frontend** | React 18, TypeScript, Vite, TailwindCSS, Zustand, TanStack Query, Framer Motion, Lucide |
-| **Backend** | Node.js, Express, TypeScript, Mongoose (MongoDB), Redis, Socket.io, Winston Logger, Zod |
-| **Thanh toán** | VNPAY Sandbox, COD |
-| **Kiến trúc** | NPM Workspaces (Monorepo: `frontend` + `backend`) |
+| **Frontend** | React 18, Vite 6, React Router 6, TailwindCSS 4, Framer Motion, Recharts, Lucide, Firebase Auth, Socket.IO Client |
+| **Backend** | Node.js 22, Express, TypeScript, Mongoose 9 (MongoDB), Redis 6, Socket.IO, Nodemailer, Multer, Helmet, Firebase Admin |
+| **Thanh toán & AI** | VNPAY Sandbox, COD, Multi-provider LLM (Gemini / OpenAI / Groq / OpenRouter / DeepSeek / Ollama) |
+| **Kiểm thử & CI/CD** | Vitest + `mongodb-memory-server` (Backend), Node `node:test` (Frontend), GitHub Actions, Docker & Nginx |
+| **Kiến trúc** | NPM Workspaces Monorepo (`backend` + `frontend`) |
 
 ---
 
@@ -39,112 +40,110 @@
 
 ```text
 Multi-product store/
-├── backend/            # Express TypeScript API Backend
+├── backend/                # Express TypeScript API Backend
 │   ├── src/
-│   │   ├── config/     # Kết nối MongoDB, Redis, Seed data
-│   │   ├── controllers/# Xử lý HTTP request & response
-│   │   ├── middleware/ # Xác thực JWT, phân quyền, xử lý lỗi
-│   │   ├── models/     # Mongoose Schemas & Types
-│   │   ├── routes/     # Khai báo endpoint định tuyến
-│   │   ├── services/   # Nghiệp vụ logic & truy vấn dữ liệu
-│   │   └── server.ts   # Khởi chạy Express & Socket.io server
-│   ├── .env.example    # Mẫu cấu hình biến môi trường
-│   └── package.json
-├── frontend/           # Ứng dụng React + Vite
+│   │   ├── app.ts          # Khởi tạo Express app & middleware (tách khỏi server)
+│   │   ├── server.ts       # Khởi chạy HTTP + Socket.IO server & background jobs
+│   │   ├── config/         # MongoDB, Redis, Security, Socket.IO, Seed data
+│   │   ├── controllers/    # HTTP request/response handlers
+│   │   ├── middleware/     # JWT auth, RBAC, error handler
+│   │   ├── models/         # Mongoose Schemas & Indexes
+│   │   ├── routes/         # REST API & Multer upload routes
+│   │   └── services/       # Nghiệp vụ: Auth, Order, Payment, Product, Cache, AI, Audit
+│   ├── tests/              # Bộ test Vitest (unit + HTTP integration)
+│   ├── Dockerfile          # Multi-stage Node 22 Alpine image
+│   └── .env.example        # Mẫu cấu hình biến môi trường
+├── frontend/               # Ứng dụng React + Vite SPA
 │   ├── src/
-│   │   ├── components/ # Các component giao diện dùng chung
-│   │   ├── context/    # Quản lý trạng thái React Context
-│   │   ├── pages/      # Các trang giao diện (Khách hàng & Admin)
-│   │   ├── services/   # API client gọi về backend
-│   │   ├── styles/     # CSS toàn cục
-│   │   ├── utils/      # Các hàm tiện ích (format tiền tệ, ngày tháng)
-│   │   └── App.jsx     # Điều hướng Router chính
-│   ├── vite.config.js  # Cấu hình Vite & API proxy
-│   └── package.json
-├── archive/            # Lưu trữ mã nguồn phiên bản cũ (legacy)
-├── doc/                # Tài liệu kỹ thuật tham khảo
-├── package.json        # NPM Workspaces cấu hình chung
-└── README.md           # Hướng dẫn dự án
+│   │   ├── components/     # UI dùng chung (Navbar, AdminNav, ErrorBoundary, AI Chat...)
+│   │   ├── context/        # Auth, Cart, Wishlist, Theme, Toast contexts
+│   │   ├── pages/          # Storefront & Admin Portal pages
+│   │   ├── services/       # API client & Socket.IO client
+│   │   ├── styles/         # UCONEXT Dual-Theme CSS tokens
+│   │   └── utils/          # Formatters & helpers
+│   ├── tests/              # Bộ test Frontend (Node built-in test runner)
+│   ├── Dockerfile          # Multi-stage Vite build -> Nginx Alpine
+│   ├── nginx.conf          # SPA fallback + reverse proxy (/api, /uploads, /socket.io)
+│   └── .env.example        # Mẫu biến môi trường Firebase phía client
+├── .github/workflows/ci.yml# CI: Backend typecheck/build/test + Frontend build/test
+├── docker-compose.yml      # Stack đầy đủ: mongodb, redis, backend, frontend
+├── doc/                    # Tài liệu kiến trúc chi tiết
+└── package.json            # NPM Workspaces root scripts
 ```
 
 ---
 
-## Hướng Dẫn Cài Đặt & Chạy Ứng Dụng
+## Chạy Nhanh Với Docker (Khuyên Dùng)
 
-### 1. Yêu cầu hệ thống
-- **Node.js**: >= 18.x
-- **NPM**: >= 9.x
-- **MongoDB**: Đã cài đặt cục bộ hoặc sử dụng kết nối MongoDB Atlas
-- **Redis** *(tùy chọn / khuyến nghị)*: Cổng `6379` để phục vụ caching
+Yêu cầu: **Docker Engine** & **Docker Compose v2**.
+
+```bash
+docker compose up --build
+```
+
+Sau khi các container khởi động và pass healthcheck:
+- **Frontend (Nginx SPA + API/WS Proxy):** [http://localhost:3000](http://localhost:3000)
+- **Backend API & Healthcheck:** [http://localhost:5000/api/health](http://localhost:5000/api/health)
+
+> **Lưu ý Production:** Trước khi triển khai thực tế, hãy ghi đè `JWT_SECRET`, `JWT_REFRESH_SECRET` (tối thiểu 24 ký tự mạnh), `CLIENT_URL`/`CORS_ORIGINS`, `VNPAY_HASH_SECRET` (nếu bật VNPAY) và đặt `AUTO_SEED=false`.
 
 ---
 
-### 2. Cài đặt Dependencies
+## Cài Đặt & Chạy Cục Bộ (Local Development)
 
-Tại thư mục gốc của dự án, chạy lệnh:
+### 1. Yêu cầu hệ thống
+- **Node.js**: `>= 22.x`
+- **NPM**: `>= 10.x`
+- **MongoDB**: cục bộ (`27017`) hoặc MongoDB Atlas
+- **Redis** *(khuyến nghị)*: cổng `6379` để kích hoạt cache
+
+### 2. Cài đặt Dependencies
 
 ```bash
 npm install
 ```
 
-*(Nhờ cơ chế NPM Workspaces, lệnh này sẽ tự động cài đặt toàn bộ gói phụ thuộc cho cả `backend` và `frontend`)*.
-
----
-
-### 3. Cấu hình biến môi trường (Environment Variables)
-
-Sao chép file `.env.example` thành `.env` trong thư mục `backend`:
+### 3. Cấu hình Biến Môi Trường
 
 ```bash
 cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-Kiểm tra và cập nhật các thông số cần thiết trong `backend/.env` (chuỗi kết nối MongoDB, Secret Key, cấu hình VNPAY,...).
+Cập nhật các thông số trong `backend/.env` (và `frontend/.env` nếu dùng đăng nhập Firebase/Google).
+
+### 4. Khởi chạy Ứng dụng
+
+Mở 2 cửa sổ terminal tại thư mục gốc:
+
+```bash
+# Terminal 1 — Backend API (port 5000)
+npm run dev:backend
+
+# Terminal 2 — Frontend Vite dev server (port 3000)
+npm run dev:frontend
+```
 
 ---
 
-### 4. Khởi chạy ứng dụng
+## Kiểm Thử & Build
 
-#### Cách 1: Chạy từ thư mục gốc (Khuyên dùng)
+```bash
+# Chạy toàn bộ test (Backend Vitest + Frontend node:test)
+npm test
 
-Mở 2 cửa sổ terminal:
+# Type-check & build Backend (bao gồm type-check thư mục tests)
+npm run typecheck:backend
 
-- **Terminal 1 (Backend - chạy trên port 5000):**
-  ```bash
-  npm run dev:backend
-  ```
-
-- **Terminal 2 (Frontend - chạy trên port 3000):**
-  ```bash
-  npm run dev:frontend
-  ```
-
-#### Cách 2: Chạy trực tiếp trong từng thư mục con
-
-- **Khởi chạy Backend:**
-  ```bash
-  cd backend
-  npm run dev
-  ```
-
-- **Khởi chạy Frontend:**
-  ```bash
-  cd frontend
-  npm run dev
-  ```
-
----
-
-### 5. Địa chỉ truy cập
-
-- **Giao diện người dùng (Frontend):** [http://localhost:3000](http://localhost:3000)
-- **API Backend:** [http://localhost:5000](http://localhost:5000)
+# Build Frontend cho Production
+npm run build:frontend
+```
 
 ---
 
 ## Tài Khoản Trải Nghiệm Mẫu
 
-Hệ thống đã tích hợp sẵn cơ chế **Seed Database** tự động tạo tài khoản và danh mục sản phẩm mẫu khi backend chạy lần đầu:
+Khi `AUTO_SEED=true` (mặc định ở chế độ development và Docker demo), hệ thống tự động tạo tài khoản mẫu:
 
 | Vai trò | Email | Mật khẩu |
 | :--- | :--- | :--- |
@@ -153,24 +152,6 @@ Hệ thống đã tích hợp sẵn cơ chế **Seed Database** tự động t�
 
 ---
 
-## Build Cho Production
-
-- **Build Backend:**
-  ```bash
-  npm run build:backend
-  # Chạy bản build:
-  npm --workspace=backend start
-  ```
-
-- **Build Frontend:**
-  ```bash
-  npm run build:frontend
-  # Xem thử bản build:
-  npm --workspace=frontend run preview
-  ```
-
----
-
 ## Tài Liệu Bổ Sung
 
-Để tìm hiểu sâu hơn về kiến trúc phân lớp, thiết kế hệ thống, sơ đồ cơ sở dữ liệu và các luồng nghiệp vụ chi tiết, vui lòng xem [doc/README.md](file:///run/media/na_duc/Folder/MyProject/Multi-product%20store/doc/README.md).
+Xem thêm tài liệu kiến trúc phân lớp và thiết kế hệ thống tại [doc/README.md](./doc/README.md).
