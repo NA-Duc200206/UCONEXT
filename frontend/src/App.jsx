@@ -20,11 +20,11 @@ import Home from './pages/Home';
 import Shop from './pages/Shop';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
-import Login from './pages/Login';
-import Register from './pages/Register';
 import NotFound from './pages/NotFound';
 
-// Secondary & Admin Pages (Code-Split via React.lazy)
+// Secondary, Auth & Admin Pages (Code-Split via React.lazy)
+const Login = React.lazy(() => import('./pages/Login'));
+const Register = React.lazy(() => import('./pages/Register'));
 const PaymentResult = React.lazy(() => import('./pages/PaymentResult'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
 const MyOrders = React.lazy(() => import('./pages/MyOrders'));

@@ -126,6 +126,7 @@ export function evaluateCouponsForCart(
     (c) =>
       c &&
       !c.isDeleted &&
+      c.isActive !== false &&
       (!(Number(c.usageLimit) > 0) || Number(c.usedCount || 0) < Number(c.usageLimit))
   );
 
