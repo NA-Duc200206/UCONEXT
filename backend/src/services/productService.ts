@@ -421,6 +421,18 @@ export const productService = {
 
   async getRecommended(userDoc: any | undefined, limitInput: number = 8) {
     const limit = Math.min(Math.max(Math.floor(Number(limitInput)) || 8, 1), 48);
+    const guestCacheKey = !userDoc ? `cache:products:recommended:guest:${limit}` : null;
+
+    if (guestCacheKey) {
+      const cached = await cacheService.get<{
+        products: any[];
+        personalized: boolean;
+        matchedCategories: string[];
+      }>(guestCacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
 
     const [inStockCandidates, reviewStats] = await Promise.all([
       Product.find({ isDeleted: { $ne: true }, stock: { $gt: 0 } })
@@ -657,10 +669,16 @@ export const productService = {
       reviewCount: ratingInfo?.reviewCount || 0
     }));
 
-    return {
+    const payload = {
       products: formatted,
       personalized,
       matchedCategories
     };
+
+    if (guestCacheKey) {
+      await cacheService.set(guestCacheKey, payload, 300);
+    }
+
+    return payload;
   }
 };

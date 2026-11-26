@@ -101,4 +101,7 @@ const UserSchema = new Schema<IUser>({
   timestamps: true
 });
 
+UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });
+UserSchema.index({ role: 1 });
+
 export const User = model<IUser>('User', UserSchema);
