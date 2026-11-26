@@ -19,6 +19,7 @@ const ORDER_TABS = [
 const MyOrders = () => {
   const { showToast } = useToast();
   const { user } = useAuth();
+  const currentUserId = user?.id || user?._id || null;
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -47,7 +48,7 @@ const MyOrders = () => {
         updatedOrder?.userId && typeof updatedOrder.userId === 'object'
           ? updatedOrder.userId._id || updatedOrder.userId.id
           : updatedOrder?.userId;
-      if (user?.id && ownerId && String(ownerId) !== String(user.id)) {
+      if (currentUserId && ownerId && String(ownerId) !== String(currentUserId)) {
         return;
       }
 
@@ -67,7 +68,7 @@ const MyOrders = () => {
     return () => {
       unsubscribeUpdate();
     };
-  }, [showToast]);
+  }, [currentUserId, showToast]);
 
   const filteredOrders = useMemo(() => {
     if (activeTab === 'all') return orders;

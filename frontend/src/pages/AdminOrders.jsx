@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { api } from '../services/api';
 import { subscribeToEvent } from '../services/socket';
 import { useToast } from '../context/ToastContext';
@@ -33,6 +33,18 @@ const AdminOrders = () => {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(1);
 
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.orders.getAll();
+      setOrders(res.orders || []);
+    } catch (err) {
+      showToast(err.message || 'Failed to load orders.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     if (!isAdmin) {
       showToast('Access denied.', 'error');
@@ -60,19 +72,7 @@ const AdminOrders = () => {
       unsubUpdated();
       unsubCancelled();
     };
-  }, [isAdmin]);
-
-  const loadOrders = async () => {
-    setLoading(true);
-    try {
-      const res = await api.orders.getAll();
-      setOrders(res.orders || []);
-    } catch (err) {
-      showToast(err.message || 'Failed to load orders.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isAdmin, loadOrders, navigate, showToast]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {

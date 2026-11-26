@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { api } from '../services/api';
@@ -31,16 +31,7 @@ const AdminAuditLogs = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
 
-  useEffect(() => {
-    if (!isAdmin) {
-      showToast('Access denied.', 'error');
-      navigate('/');
-      return;
-    }
-    loadLogs();
-  }, [isAdmin, targetType, page]);
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.analytics.getAuditLogs({
@@ -56,7 +47,16 @@ const AdminAuditLogs = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, targetType, showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      showToast('Access denied.', 'error');
+      navigate('/');
+      return;
+    }
+    loadLogs();
+  }, [isAdmin, loadLogs, navigate, showToast]);
 
   return (
     <div className="admin-page-container">

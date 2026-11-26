@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -37,7 +37,10 @@ const Cart = () => {
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutFeedback, setCheckoutFeedback] = useState(null);
 
-  const savedAddresses = Array.isArray(user?.savedAddresses) ? user.savedAddresses : [];
+  const savedAddresses = useMemo(
+    () => (Array.isArray(user?.savedAddresses) ? user.savedAddresses : []),
+    [user?.savedAddresses]
+  );
 
   // Promo Code states
   const [promoCode, setPromoCode] = useState('');
@@ -133,7 +136,7 @@ const Cart = () => {
         setDiscountAmount(res.discountAmount);
         setCouponFeedback({
           type: 'success',
-          message: `Coupon "${res.code}" applied (-${formatCurrency(res.discountAmount)}).`,
+          message: `Coupon "${res.code}" applied (-${formatVND(res.discountAmount)}).`,
         });
       } catch (err) {
         if (cancelled) return;
@@ -165,7 +168,7 @@ const Cart = () => {
     setCouponFeedback(null);
   };
 
-  const applySavedAddress = (addr) => {
+  const applySavedAddress = React.useCallback((addr) => {
     if (!addr) return;
     setSelectedAddressId(String(addr._id || addr.id || ''));
     setFullName(addr.fullName || user?.name || '');
@@ -180,7 +183,7 @@ const Cart = () => {
       setStreetAddress(rawAddress);
       setProvinceCity('');
     }
-  };
+  }, [user?.name]);
 
   useEffect(() => {
     if (isCheckoutMode && user && savedAddresses.length > 0 && !selectedAddressId && !phoneNumber && !streetAddress) {
@@ -189,7 +192,7 @@ const Cart = () => {
         applySavedAddress(defaultAddr);
       }
     }
-  }, [isCheckoutMode, user, savedAddresses.length, selectedAddressId, phoneNumber, streetAddress]);
+  }, [isCheckoutMode, user, savedAddresses, selectedAddressId, phoneNumber, streetAddress, applySavedAddress]);
 
   const handleProceedToCheckout = () => {
     setCheckoutFeedback(null);
@@ -220,8 +223,8 @@ const Cart = () => {
       const orderItems = cart.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
-        color: item.color,
-        size: item.size,
+        color: item.color || undefined,
+        size: item.size || undefined,
       }));
 
       const locationPart = provinceCity.trim()

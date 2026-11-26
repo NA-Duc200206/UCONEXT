@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
-import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
+import { connectTestDB, clearTestDB, disconnectTestDB } from './dbHelper';
 import { Category, Coupon, CouponRedemption, Order, Product, User } from '../src/models';
 import { orderService } from '../src/services/orderService';
 import { emailService } from '../src/services/emailService';
@@ -9,14 +8,8 @@ import * as socketConfig from '../src/config/socket';
 const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
 describe('orderIntegrity (transactions, concurrency, coupon redemptions, strict transitions & COD caps)', () => {
-  let replSet: MongoMemoryReplSet;
-
   beforeAll(async () => {
-    process.env.PAYMENTS_VNPAY_ENABLED = 'true';
-    process.env.VNPAY_TMN_CODE = 'TESTTMN1';
-    process.env.VNPAY_HASH_SECRET = 'test_vnpay_secret_key_1234567890_secure';
-    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
-    await mongoose.connect(replSet.getUri());
+    await connectTestDB();
     // Ensure collections and unique indexes exist before starting multi-doc transactions
     await Promise.all([
       User.init(),
@@ -31,20 +24,21 @@ describe('orderIntegrity (transactions, concurrency, coupon redemptions, strict 
     vi.spyOn(emailService, 'sendOrderStatusUpdate').mockResolvedValue(undefined as any);
   }, 60_000);
 
+  beforeEach(() => {
+    vi.stubEnv('PAYMENTS_VNPAY_ENABLED', 'true');
+    vi.stubEnv('VNPAY_TMN_CODE', 'TESTTMN1');
+    vi.stubEnv('VNPAY_HASH_SECRET', 'test_vnpay_secret_key_1234567890_secure');
+  });
+
   afterEach(async () => {
-    const collections = mongoose.connection.collections;
-    for (const key of Object.keys(collections)) {
-      await collections[key].deleteMany({});
-    }
+    await clearTestDB();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   afterAll(async () => {
     vi.restoreAllMocks();
-    await mongoose.disconnect();
-    if (replSet) {
-      await replSet.stop();
-    }
+    await disconnectTestDB();
   });
 
   async function seedFixtures(overrides?: { stock?: number; price?: number; perUserLimit?: number; usageLimit?: number }) {

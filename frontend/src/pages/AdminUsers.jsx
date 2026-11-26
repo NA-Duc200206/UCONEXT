@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -17,16 +17,7 @@ const AdminUsers = () => {
   const [roleFilter, setRoleFilter] = useState('all');
   const [pendingSelfRole, setPendingSelfRole] = useState(null);
 
-  useEffect(() => {
-    if (!isAdmin) {
-      showToast('Access denied. Administrator privileges required.', 'error');
-      navigate('/');
-      return;
-    }
-    loadUsers();
-  }, [isAdmin]);
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.auth.getAllUsers();
@@ -36,7 +27,16 @@ const AdminUsers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      showToast('Access denied. Administrator privileges required.', 'error');
+      navigate('/');
+      return;
+    }
+    loadUsers();
+  }, [isAdmin, loadUsers, navigate, showToast]);
 
   const executeRoleChange = async (userId, newRole) => {
     try {

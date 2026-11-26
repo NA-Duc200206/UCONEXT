@@ -379,13 +379,15 @@ const Shop = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  const userId = user?._id || user?.id || null;
+
   // Sync URL query params into local filter state when navigating from Navbar or Home
   useEffect(() => {
     const paramCat = searchParams.get('categoryId');
     const paramSearch = searchParams.get('search') || '';
     const paramSort = searchParams.get('sort');
 
-    if (paramSort === 'recommended' && user) {
+    if (paramSort === 'recommended' && userId) {
       setSortBy('recommended');
     }
 
@@ -408,18 +410,18 @@ const Shop = () => {
       setSearchTerm(paramSearch);
     }
     setPage(1);
-  }, [searchParams, categories, user]);
+  }, [searchParams, categories, userId]);
 
   useEffect(() => {
-    if (!authLoading && !user && sortBy === 'recommended') {
+    if (!authLoading && !userId && sortBy === 'recommended') {
       setSortBy('featured');
     }
-  }, [authLoading, user, sortBy]);
+  }, [authLoading, userId, sortBy]);
 
   const userPrefsKey = JSON.stringify(user?.preferredCategories || []);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setRecommendedProducts([]);
       return;
     }
@@ -438,7 +440,7 @@ const Shop = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?._id, user?.id, userPrefsKey]);
+  }, [userId, userPrefsKey]);
 
   // Load categories once (server attaches accurate productCount per category via Redis cache)
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
@@ -211,7 +211,7 @@ const ProductDetail = () => {
     };
   }, [product?._id, product?.id, user?._id, user?.id]);
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       const res = await api.reviews.getByProductId(id);
       setReviews(res.reviews || []);
@@ -220,13 +220,13 @@ const ProductDetail = () => {
     } catch (err) {
       console.error('Failed to load reviews:', err.message);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     if (id) {
       fetchReviews();
     }
-  }, [id]);
+  }, [id, fetchReviews]);
 
   // Unique gallery images (only show thumbnail strip if > 1 unique image)
   const galleryImages = useMemo(() => {

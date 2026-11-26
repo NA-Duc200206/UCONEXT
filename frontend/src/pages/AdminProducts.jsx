@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -70,19 +70,7 @@ const AdminProducts = () => {
     }
   };
 
-  useEffect(() => {
-    if (!isAdmin) {
-      showToast('Access denied.', 'error');
-      navigate('/');
-      return;
-    }
-    const timer = setTimeout(() => {
-      loadData();
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [isAdmin, page, searchQuery, categoryFilter]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [catRes, prodRes, statsRes] = await Promise.all([
@@ -114,7 +102,19 @@ const AdminProducts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, searchQuery, categoryFilter, showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      showToast('Access denied.', 'error');
+      navigate('/');
+      return;
+    }
+    const timer = setTimeout(() => {
+      loadData();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [isAdmin, loadData, navigate, showToast]);
 
   // Row selection handlers
   const handleSelectAll = (e) => {

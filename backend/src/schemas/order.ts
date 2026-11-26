@@ -4,8 +4,18 @@ import { objectIdSchema } from './common';
 const orderItemInputSchema = z.object({
   productId: objectIdSchema,
   quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1.').max(99, 'Quantity cannot exceed 99 per line item.'),
-  color: z.string().trim().max(40, 'Color must be at most 40 characters.').optional(),
-  size: z.string().trim().max(40, 'Size must be at most 40 characters.').optional(),
+  color: z
+    .string()
+    .trim()
+    .max(40, 'Color must be at most 40 characters.')
+    .nullish()
+    .transform((v) => v || undefined),
+  size: z
+    .string()
+    .trim()
+    .max(40, 'Size must be at most 40 characters.')
+    .nullish()
+    .transform((v) => v || undefined),
 });
 
 const shippingAddressSchema = z.union([
@@ -24,7 +34,12 @@ export const createOrderSchema = z.object({
     .max(50, 'Order can contain at most 50 items.'),
   shippingAddress: shippingAddressSchema,
   paymentMethod: z.enum(['cod', 'vnpay']).optional().default('cod'),
-  couponCode: z.string().trim().max(40).optional(),
+  couponCode: z
+    .string()
+    .trim()
+    .max(40)
+    .nullish()
+    .transform((v) => v || undefined),
 });
 
 export const updateOrderStatusSchema = z

@@ -11,7 +11,7 @@ const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 
 describe('orderService', () => {
   beforeAll(async () => {
     await connectTestDB();
-    vi.spyOn(socketConfig, 'emitEvent').mockImplementation(() => {});
+    vi.spyOn(socketConfig, 'emitOrderEvent').mockImplementation(() => {});
     vi.spyOn(emailService, 'sendOrderConfirmation').mockResolvedValue(undefined as any);
     vi.spyOn(emailService, 'sendOrderStatusUpdate').mockResolvedValue(undefined as any);
   });

@@ -46,12 +46,20 @@ describe('Zod boundary validation & safe 500 error responses', () => {
     expect(registerSchema.safeParse({ name: 'A'.repeat(81), email: 'a@b.vn', password: 'StrongPassword1' }).success).toBe(false);
     expect(loginSchema.safeParse({ email: `${'a'.repeat(250)}@b.vn`, password: 'x' }).success).toBe(false);
 
-    // order
+    // order (including null optional variant fields from CartContext)
     expect(
       createOrderSchema.safeParse({
         items: [{ productId: VALID_OID, quantity: 2, color: 'Black', size: 'M' }],
         shippingAddress: '123 Nguyen Hue, District 1, HCMC',
         paymentMethod: 'cod',
+      }).success
+    ).toBe(true);
+    expect(
+      createOrderSchema.safeParse({
+        items: [{ productId: VALID_OID, quantity: 1, color: null, size: null }],
+        shippingAddress: '123 Nguyen Hue, District 1, HCMC',
+        paymentMethod: 'cod',
+        couponCode: null,
       }).success
     ).toBe(true);
     expect(
@@ -141,10 +149,21 @@ describe('Zod boundary validation & safe 500 error responses', () => {
     expect(aiChatSchema.safeParse({ message: 'Recommend headphones under 2M' }).success).toBe(true);
     expect(aiChatSchema.safeParse({ message: 'M'.repeat(1001) }).success).toBe(false);
 
-    // cart
+    // cart (including null optional color/size/image fields from CartContext)
     expect(
       syncCartSchema.safeParse({
-        cart: [{ productId: VALID_OID, name: 'Headphones', price: 100000, quantity: 2 }],
+        cart: [
+          {
+            productId: VALID_OID,
+            name: 'Headphones',
+            price: 100000,
+            quantity: 2,
+            stock: 10,
+            image: null,
+            color: null,
+            size: null,
+          },
+        ],
       }).success
     ).toBe(true);
     expect(

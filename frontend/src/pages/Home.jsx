@@ -74,7 +74,7 @@ const CategoryTile = ({ cat }) => {
       <img
         src={imgUrl}
         alt={displayTitle}
-        loading="lazy"
+        decoding="async"
         onError={handleImageError}
         style={{
           position: 'absolute',
@@ -495,14 +495,20 @@ const Home = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catRes, prodRes] = await Promise.all([
+        const [catResult, prodResult] = await Promise.allSettled([
           api.categories.getAll(),
-          api.products.getAll({ limit: 160 }),
+          api.products.getAll({ limit: 100 }),
         ]);
-        setCategories(catRes.categories || []);
-        setProducts(prodRes.products || []);
-      } catch (error) {
-        console.error('Error fetching home data:', error?.message || error);
+        if (catResult.status === 'fulfilled') {
+          setCategories(catResult.value?.categories || []);
+        } else {
+          console.error('Error fetching home categories:', catResult.reason?.message || catResult.reason);
+        }
+        if (prodResult.status === 'fulfilled') {
+          setProducts(prodResult.value?.products || []);
+        } else {
+          console.error('Error fetching home products:', prodResult.reason?.message || prodResult.reason);
+        }
       } finally {
         setLoading(false);
       }

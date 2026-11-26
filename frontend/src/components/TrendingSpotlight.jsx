@@ -110,7 +110,7 @@ const TrendingSpotlight = ({ products = [] }) => {
                 <img
                   src={getSafeImageUrl(prod.image)}
                   alt={prod.name}
-                  loading="lazy"
+                  decoding="async"
                   onError={handleImageError}
                   className="ts-card-img"
                 />

@@ -7,7 +7,7 @@ import { redisClient } from '../config/redis';
  * Uses RedisStore whenever Redis is connected and ready, transparently falling
  * back to an in-memory store when Redis is unavailable so APIs stay resilient.
  */
-class ResilientRedisStore implements Store {
+export class ResilientRedisStore implements Store {
   public localKeys = false;
   public prefix: string;
   private memoryStore = new MemoryStore();

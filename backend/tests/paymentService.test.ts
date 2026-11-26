@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import qs from 'qs';
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { connectTestDB, clearTestDB, disconnectTestDB } from './dbHelper';
 import { AuditLog, Category, Coupon, Order, PaymentTransaction, Product, User } from '../src/models';
@@ -28,13 +28,16 @@ function signVnpayParams(params: Record<string, any>, secret = TEST_SECRET) {
 
 describe('paymentService (VNPAY security, merchant verification, deadlines & reconciliation)', () => {
   beforeAll(async () => {
-    process.env.PAYMENTS_VNPAY_ENABLED = 'true';
-    process.env.VNPAY_HASH_SECRET = TEST_SECRET;
-    process.env.VNPAY_TMN_CODE = TEST_TMN;
     await connectTestDB();
     vi.spyOn(socketConfig, 'emitOrderEvent').mockImplementation(() => {});
     vi.spyOn(emailService, 'sendOrderConfirmation').mockResolvedValue(undefined as any);
     vi.spyOn(emailService, 'sendOrderStatusUpdate').mockResolvedValue(undefined as any);
+  });
+
+  beforeEach(() => {
+    vi.stubEnv('PAYMENTS_VNPAY_ENABLED', 'true');
+    vi.stubEnv('VNPAY_HASH_SECRET', TEST_SECRET);
+    vi.stubEnv('VNPAY_TMN_CODE', TEST_TMN);
   });
 
   afterEach(async () => {
