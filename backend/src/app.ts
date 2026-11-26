@@ -1,6 +1,7 @@
 import express, { Express, Request } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import fs from 'fs';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import path from 'path';
@@ -24,6 +25,19 @@ import { getTrustedClientIp, globalLimiter, parseTrustProxyHops } from './middle
 
 export interface CreateAppOptions {
   disableRateLimit?: boolean;
+  serveFrontendDistDir?: string;
+}
+
+function resolveFrontendDistDir(opts: CreateAppOptions): string | null {
+  const explicitDir = opts.serveFrontendDistDir?.trim();
+  const envFlag = (process.env.SERVE_FRONTEND_DIST || '').trim().toLowerCase();
+  const enabledByEnv = envFlag === 'true' || envFlag === '1';
+
+  const candidate = explicitDir || (enabledByEnv ? path.resolve(__dirname, '../../frontend/dist') : '');
+  if (!candidate) return null;
+
+  const indexPath = path.join(candidate, 'index.html');
+  return fs.existsSync(indexPath) ? candidate : null;
 }
 
 function isInternalRequest(req: Request): boolean {
@@ -113,10 +127,14 @@ export function createApp(opts: CreateAppOptions = {}): Express {
   app.use('/api/wishlist', wishlistRoutes);
   app.use('/api/ai', aiRoutes);
 
-  // Health checks
-  app.get('/', (_req, res) => {
-    res.json({ message: 'Welcome to UCONEXT Enterprise TS API Server', status: 'Running' });
-  });
+  const frontendDistDir = resolveFrontendDistDir(opts);
+
+  // Root welcome endpoint (only when not serving the built SPA directly)
+  if (!frontendDistDir) {
+    app.get('/', (_req, res) => {
+      res.json({ message: 'Welcome to UCONEXT Enterprise TS API Server', status: 'Running' });
+    });
+  }
 
   // Public liveness/health probe (minimal surface — never exposes internal DB/Redis topology)
   app.get('/api/health', (_req, res) => {
@@ -150,6 +168,35 @@ export function createApp(opts: CreateAppOptions = {}): Express {
       timestamp: new Date().toISOString(),
     });
   });
+
+  // Optional single-service SPA static hosting (e.g. Render Free Blueprint with SERVE_FRONTEND_DIST=true)
+  if (frontendDistDir) {
+    const indexHtmlPath = path.join(frontendDistDir, 'index.html');
+    app.use(
+      '/assets',
+      express.static(path.join(frontendDistDir, 'assets'), {
+        maxAge: '1y',
+        immutable: true,
+      })
+    );
+    app.use(
+      express.static(frontendDistDir, {
+        index: false,
+        maxAge: '1h',
+      })
+    );
+    app.get('*', (req, res, next) => {
+      if (
+        req.path.startsWith('/api') ||
+        req.path.startsWith('/uploads') ||
+        req.path.startsWith('/socket.io')
+      ) {
+        return next();
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(indexHtmlPath);
+    });
+  }
 
   // Global Error Handler (must be registered after routes)
   app.use(errorHandler);

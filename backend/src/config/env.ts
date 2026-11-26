@@ -134,7 +134,7 @@ export function validateProductionEnv(env: NodeJS.ProcessEnv = process.env): str
     );
   }
 
-  if (!env.CLIENT_URL?.trim() && !env.CORS_ORIGINS?.trim()) {
+  if (!env.CLIENT_URL?.trim() && !env.CORS_ORIGINS?.trim() && !env.RENDER_EXTERNAL_URL?.trim()) {
     issues.push('CLIENT_URL (or CORS_ORIGINS) must be configured in production for CORS whitelist.');
   }
 

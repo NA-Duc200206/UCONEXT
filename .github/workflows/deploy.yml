@@ -153,8 +153,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${SSH_HOST}" || -z "${SSH_USER}" || -z "${SSH_KEY}" ]]; then
-            echo "Missing DEPLOY_SSH_HOST, DEPLOY_SSH_USER, or DEPLOY_SSH_KEY in staging environment secrets."
-            exit 1
+            echo "::notice::Skipping staging VPS deployment because DEPLOY_SSH_HOST, DEPLOY_SSH_USER, or DEPLOY_SSH_KEY secrets are not configured (free demo mode)."
+            exit 0
           fi
 
           trap 'rm -f /tmp/deploy_key' EXIT
@@ -247,8 +247,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${SSH_HOST}" || -z "${SSH_USER}" || -z "${SSH_KEY}" ]]; then
-            echo "Missing DEPLOY_SSH_HOST, DEPLOY_SSH_USER, or DEPLOY_SSH_KEY in production environment secrets."
-            exit 1
+            echo "::notice::Skipping production VPS deployment because DEPLOY_SSH_HOST, DEPLOY_SSH_USER, or DEPLOY_SSH_KEY secrets are not configured (free demo mode)."
+            exit 0
           fi
 
           trap 'rm -f /tmp/deploy_key' EXIT

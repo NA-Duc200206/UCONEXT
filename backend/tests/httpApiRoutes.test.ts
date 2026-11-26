@@ -1,5 +1,6 @@
 import fs from 'fs';
 import http from 'http';
+import os from 'os';
 import path from 'path';
 import { AddressInfo } from 'net';
 import sharp from 'sharp';
@@ -341,5 +342,42 @@ describe('Express HTTP routes, RBAC, CORS, domain endpoints, and upload security
     const readyBody: any = await readyDegradedRes.json();
     expect(readyBody.status).toBe('degraded');
     expect(readyBody.db.connected).toBe(false);
+  });
+
+  it('serves built SPA static assets and index.html fallback when serveFrontendDistDir is configured', async () => {
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), 'uconext-spa-'));
+    fs.mkdirSync(path.join(tmpDist, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDist, 'index.html'), '<!doctype html><html><body>UCONEXT SPA</body></html>');
+    fs.writeFileSync(path.join(tmpDist, 'assets', 'app-abc123.js'), 'console.log("ok");');
+
+    const spaApp = createApp({ disableRateLimit: true, serveFrontendDistDir: tmpDist });
+    const spaServer = http.createServer(spaApp);
+    await new Promise<void>((resolve) => spaServer.listen(0, '127.0.0.1', () => resolve()));
+    const spaPort = (spaServer.address() as AddressInfo).port;
+    const spaUrl = `http://127.0.0.1:${spaPort}`;
+
+    try {
+      const rootRes = await fetch(`${spaUrl}/`);
+      expect(rootRes.status).toBe(200);
+      expect(rootRes.headers.get('cache-control')).toBe('no-cache');
+      expect(await rootRes.text()).toContain('UCONEXT SPA');
+
+      const deepRouteRes = await fetch(`${spaUrl}/products/some-item`);
+      expect(deepRouteRes.status).toBe(200);
+      expect(deepRouteRes.headers.get('cache-control')).toBe('no-cache');
+      expect(await deepRouteRes.text()).toContain('UCONEXT SPA');
+
+      const assetRes = await fetch(`${spaUrl}/assets/app-abc123.js`);
+      expect(assetRes.status).toBe(200);
+      expect(assetRes.headers.get('cache-control')).toContain('immutable');
+
+      // Unknown /api routes must NOT fall back to index.html
+      const unknownApiRes = await fetch(`${spaUrl}/api/non-existent-endpoint`);
+      expect(unknownApiRes.status).toBe(404);
+      expect(await unknownApiRes.text()).not.toContain('UCONEXT SPA');
+    } finally {
+      await new Promise<void>((resolve) => spaServer.close(() => resolve()));
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
   });
 });

@@ -8,7 +8,7 @@ export function normalizeOrigin(origin: string): string {
 }
 
 export function parseAllowedOrigins(env: NodeJS.ProcessEnv = process.env): string[] {
-  const raw = [env.CLIENT_URL, env.CORS_ORIGINS].filter(Boolean).join(',');
+  const raw = [env.CLIENT_URL, env.CORS_ORIGINS, env.RENDER_EXTERNAL_URL].filter(Boolean).join(',');
   const parsed = raw
     .split(',')
     .map(normalizeOrigin)
