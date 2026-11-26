@@ -118,7 +118,12 @@ const Register = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const rawRedirect = searchParams.get('redirect') || '/';
-  const redirectTarget = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
+  const redirectTarget =
+    rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : !rawRedirect.includes('://') && !rawRedirect.startsWith('//')
+        ? `/${rawRedirect}`
+        : '/';
 
   // Form State
   const [name, setName] = useState('');

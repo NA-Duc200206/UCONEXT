@@ -18,17 +18,22 @@ test.describe('Admin order management with realtime customer update', () => {
       const customerPage = await customerContext.newPage();
       const adminPage = await adminContext.newPage();
 
-      // 1. Register customer and create a COD order via API in customerContext
+      // 1. Register customer and pick an in-stock product below the 5,000,000 VND COD cap
       const regRes = await customerContext.request.post('/api/auth/register', {
         data: { name: 'Realtime Buyer', email: customerEmail, password: customerPassword },
       });
       expect(regRes.status()).toBe(201);
       const { token: customerToken } = await regRes.json();
 
-      const prodsRes = await customerContext.request.get('/api/products?limit=1');
+      const prodsRes = await customerContext.request.get(
+        '/api/products?inStock=true&maxPrice=4000000&sort=price_asc&limit=5'
+      );
       expect(prodsRes.ok()).toBe(true);
       const prodsJson = await prodsRes.json();
-      const productId = prodsJson.products[0]?.id || prodsJson.products[0]?._id;
+      const codEligible = (prodsJson.products || []).find(
+        (p: any) => Number(p.stock) > 0 && Number(p.price) > 0 && Number(p.price) <= 4_000_000
+      );
+      const productId = codEligible?.id || codEligible?._id;
       expect(productId).toBeTruthy();
 
       const orderRes = await customerContext.request.post('/api/orders', {
@@ -39,37 +44,40 @@ test.describe('Admin order management with realtime customer update', () => {
           paymentMethod: 'cod',
         },
       });
-      expect(orderRes.status()).toBe(201);
+      expect(orderRes.status(), await orderRes.text()).toBe(201);
       const orderJson = await orderRes.json();
       const orderId = String(orderJson.order.id || orderJson.order._id);
-      const shortOrderId = orderId.slice(-6).toUpperCase();
 
       // 2. Customer signs in through UI and opens /orders (connects Socket.IO)
       await customerPage.goto('/login');
       await customerPage.locator('input[type="email"]').fill(customerEmail);
       await customerPage.locator('input[type="password"]').fill(customerPassword);
       await customerPage.getByRole('button', { name: /sign in|log in/i }).click();
+      await expect(customerPage).not.toHaveURL(/\/login/);
+
       await customerPage.goto('/orders');
-      await expect(customerPage.getByText(new RegExp(shortOrderId, 'i')).first()).toBeVisible();
-      await expect(customerPage.getByText('Pending').first()).toBeVisible();
+      const customerOrderCard = customerPage
+        .locator('.orders-surface', { hasText: `Order #${orderId}` })
+        .first();
+      await expect(customerOrderCard).toBeVisible();
+      await expect(customerOrderCard.locator('.badge', { hasText: 'Pending' })).toBeVisible();
 
       // 3. Admin logs in and advances order status from pending -> confirmed
       await adminPage.goto('/login');
       await adminPage.locator('input[type="email"]').fill(ADMIN_EMAIL);
       await adminPage.locator('input[type="password"]').fill(ADMIN_PASSWORD);
       await adminPage.getByRole('button', { name: /sign in|log in/i }).click();
+      await expect(adminPage).not.toHaveURL(/\/login/);
+
       await adminPage.goto('/admin/orders');
-
-      const orderRow = adminPage
-        .locator('tr, [data-order-id]', {
-          hasText: new RegExp(shortOrderId, 'i'),
-        })
+      const adminOrderCard = adminPage
+        .locator('.admin-surface-elevated', { hasText: `Order #${orderId}` })
         .first();
-      await expect(orderRow).toBeVisible();
-      await orderRow.locator('select').first().selectOption('confirmed');
+      await expect(adminOrderCard).toBeVisible();
+      await adminOrderCard.getByLabel('Update order status').selectOption('confirmed');
 
-      // 4. Customer page updates live to Processing via Socket.IO without reloading
-      await expect(customerPage.getByText('Processing').first()).toBeVisible();
+      // 4. Customer order card updates live to Processing via Socket.IO without reloading
+      await expect(customerOrderCard.locator('.badge', { hasText: 'Processing' })).toBeVisible();
     } finally {
       await customerContext.close();
       await adminContext.close();
