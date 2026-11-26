@@ -5,9 +5,9 @@ import { useCart } from '../context/CartContext';
 import { useTheme } from '../context/ThemeContext';
 import { useWishlist } from '../context/WishlistContext';
 import { api } from '../services/api';
-import { 
-  ShoppingBag, User, LogOut, LayoutDashboard, Sun, Moon, 
-  Search, Bell, Heart, Menu, X, ChevronRight, ChevronDown, ArrowUpRight, Package, 
+import {
+  ShoppingBag, Sun, Moon,
+  Search, Heart, Menu, X, ChevronDown, ArrowUpRight, Package,
   Settings, Trash2, Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -75,6 +75,13 @@ const Navbar = () => {
   const [categoryCounts, setCategoryCounts] = useState({});
   const megaMenuTimeout = useRef(null);
   const desktopNavRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchOpen]);
 
   const cartCount = getCartItemsCount();
   const prevCartCountRef = useRef(cartCount);
@@ -633,11 +640,12 @@ const Navbar = () => {
             {searchOpen ? (
               <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center' }}>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search products..."
-                  autoFocus
+                  aria-label="Search products"
                   style={{
                     width: '220px',
                     padding: '8px 32px 8px 12px',

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { connectTestDB, clearTestDB, disconnectTestDB } from './dbHelper';
 import { Category, Order, Product, Review, User } from '../src/models';
 import { productService } from '../src/services/productService';
+import { redisClient } from '../src/config/redis';
 
 describe('productService.getRecommended', () => {
   beforeAll(async () => {
@@ -9,6 +10,7 @@ describe('productService.getRecommended', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await clearTestDB();
   });
 
@@ -243,5 +245,85 @@ describe('productService.getRecommended', () => {
     await expect(productService.delete('507f1f77bcf86cd799439011')).rejects.toMatchObject({ statusCode: 404 });
     expect(await productService.delete(p2._id.toString())).toBe(true);
     await expect(productService.delete(p2._id.toString())).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('caches guest recommendations in Redis and invalidates on product mutation', async () => {
+    const store = new Map<string, string>();
+    vi.spyOn(redisClient, 'isReady', 'get').mockReturnValue(true);
+    const getSpy = vi.spyOn(redisClient, 'get').mockImplementation((async (key: string) => store.get(key) ?? null) as any);
+    const setExSpy = vi.spyOn(redisClient, 'setEx').mockImplementation((async (key: string, _ttl: number, val: string) => {
+      store.set(key, val);
+      return 'OK';
+    }) as any);
+    vi.spyOn(redisClient, 'keys').mockImplementation((async (pattern: string) => {
+      const prefix = pattern.replace(/\*$/, '');
+      return Array.from(store.keys()).filter((k) => k.startsWith(prefix));
+    }) as any);
+    vi.spyOn(redisClient, 'del').mockImplementation((async (keys: string | string[]) => {
+      const arr = Array.isArray(keys) ? keys : [keys];
+      arr.forEach((k) => store.delete(k));
+      return arr.length;
+    }) as any);
+
+    const cat = await Category.create({ name: 'Desk Gear', slug: 'desk-gear-cache' });
+    await Product.create({
+      name: 'Aluminum Stand',
+      slug: 'aluminum-stand',
+      price: 650000,
+      stock: 10,
+      categoryId: cat._id as any,
+    });
+
+    const first = await productService.getRecommended(undefined, 4);
+    expect(first.products).toHaveLength(1);
+    expect(setExSpy).toHaveBeenCalledWith('cache:products:recommended:guest:4', 300, expect.any(String));
+
+    // Second call is served directly from cache without hitting DB again
+    const findSpy = vi.spyOn(Product, 'find');
+    const second = await productService.getRecommended(undefined, 4);
+    expect(second.products).toHaveLength(1);
+    expect(getSpy).toHaveBeenCalledWith('cache:products:recommended:guest:4');
+    expect(findSpy).not.toHaveBeenCalled();
+
+    // Creating a product invalidates cache:products:* so the next guest fetch returns 2 items
+    await productService.create({
+      name: 'Mechanical Keypad',
+      price: 990000,
+      stock: 7,
+      categoryId: cat._id.toString(),
+    });
+    const third = await productService.getRecommended(undefined, 4);
+    expect(third.products).toHaveLength(2);
+  });
+
+  it('registers performance indexes across Order, Product, Review, and User schemas', () => {
+    const orderIndexes = Order.schema.indexes().map(([fields]) => fields);
+    expect(orderIndexes).toEqual(
+      expect.arrayContaining([
+        { createdAt: -1 },
+        { paymentStatus: 1, status: 1, createdAt: -1 },
+        { userId: 1, couponCode: 1 },
+        { 'items.productId': 1, userId: 1, status: 1 },
+        { paymentMethod: 1, paymentStatus: 1, paymentDeadline: 1 },
+      ])
+    );
+
+    const productIndexes = Product.schema.indexes().map(([fields]) => fields);
+    expect(productIndexes).toEqual(
+      expect.arrayContaining([
+        { isDeleted: 1, categoryId: 1, createdAt: -1 },
+        { name: 'text', description: 'text' },
+      ])
+    );
+
+    const reviewIndexes = Review.schema.indexes().map(([fields]) => fields);
+    expect(reviewIndexes).toEqual(
+      expect.arrayContaining([{ productId: 1, isDeleted: 1, createdAt: -1 }])
+    );
+
+    const userIndexes = User.schema.indexes().map(([fields]) => fields);
+    expect(userIndexes).toEqual(
+      expect.arrayContaining([{ resetPasswordToken: 1 }, { role: 1 }])
+    );
   });
 });

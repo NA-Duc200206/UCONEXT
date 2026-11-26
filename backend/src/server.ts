@@ -56,7 +56,8 @@ const bootServer = async () => {
     await connectDB();
     await connectRedis();
 
-    if (process.env.NODE_ENV !== 'production' && shouldAutoSeed()) {
+    const allowProdSeed = ['true', '1'].includes((process.env.ALLOW_PROD_SEED || '').trim().toLowerCase());
+    if (shouldAutoSeed() && (process.env.NODE_ENV !== 'production' || allowProdSeed)) {
       await seedDatabase();
     } else {
       logger.info('Skipping automatic database seed (use explicit CLI `npm run seed --workspace=backend`)');

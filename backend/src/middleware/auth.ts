@@ -40,7 +40,7 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
 
     req.user = user;
     return next();
-  } catch (error: any) {
+  } catch (_error: any) {
     return res.status(500).json({ message: 'System authentication error.' });
   }
 };

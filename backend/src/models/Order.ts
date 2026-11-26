@@ -73,6 +73,14 @@ const OrderSchema = new Schema<IOrder>({
 });
 
 OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ status: 1, paymentStatus: 1, createdAt: -1 });
+OrderSchema.index({ paymentStatus: 1, status: 1, createdAt: -1 });
+OrderSchema.index({ userId: 1, couponCode: 1 });
+OrderSchema.index({ 'items.productId': 1, userId: 1, status: 1 });
+OrderSchema.index(
+  { paymentMethod: 1, paymentStatus: 1, paymentDeadline: 1 },
+  { partialFilterExpression: { paymentMethod: 'vnpay', paymentStatus: 'pending' } }
+);
 
 export const Order = model<IOrder>('Order', OrderSchema);

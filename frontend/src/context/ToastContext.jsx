@@ -40,17 +40,19 @@ export const ToastProvider = ({ children }) => {
       {toasts.length > 0 && (
         <div className="status-pill-container" role="status" aria-live="polite">
           {toasts.map(toast => (
-            <div
+            <button
               key={toast.id}
+              type="button"
               className={`status-pill status-pill-${toast.type}`}
               onClick={() => removeToast(toast.id)}
+              aria-label={`Dismiss notification: ${toast.message}`}
             >
               <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                 {STATUS_ICONS[toast.type] || STATUS_ICONS.info}
               </span>
               <span>{toast.message}</span>
               <X size={13} style={{ opacity: 0.55, marginLeft: '2px', flexShrink: 0 }} />
-            </div>
+            </button>
           ))}
         </div>
       )}

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { connectTestDB, clearTestDB, disconnectTestDB } from './dbHelper';
-import { AuditLog, Coupon, Order, Product, Review, User } from '../src/models';
+import { AuditLog, Product, Review, User } from '../src/models';
 import { categoryService } from '../src/services/categoryService';
 import { productService } from '../src/services/productService';
 import { couponService } from '../src/services/couponService';

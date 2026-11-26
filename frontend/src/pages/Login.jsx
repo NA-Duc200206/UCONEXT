@@ -494,6 +494,7 @@ const Login = () => {
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div
+          role="presentation"
           style={{
             position: 'fixed',
             inset: 0,
@@ -506,13 +507,17 @@ const Login = () => {
             WebkitBackdropFilter: 'blur(8px)',
             padding: '20px',
           }}
-          onClick={() => {
-            setShowForgotModal(false);
-            setForgotSent(false);
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowForgotModal(false);
+              setForgotSent(false);
+            }
           }}
         >
           <div
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Reset password"
             style={{
               width: '100%',
               maxWidth: '420px',

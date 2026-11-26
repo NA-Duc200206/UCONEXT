@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, Users, Search, Shield, UserCheck, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users, Search } from 'lucide-react';
 import AdminNav from '../components/AdminNav';
 
 const AdminUsers = () => {
@@ -118,6 +118,7 @@ const AdminUsers = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Role:</span>
           <select
+            aria-label="Filter users by role"
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
             style={{
@@ -170,7 +171,7 @@ const AdminUsers = () => {
                 const isSelf = u.id === currentUser?.id || u._id === currentUser?._id;
                 return (
                   <tr key={u.id || u._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                    <td style={{ padding: '16px 20px' }}>
+                    <td style={{ padding: '16px 20px' }} aria-label={u.name || u.email || 'User'}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{
                           width: '36px',
@@ -236,6 +237,7 @@ const AdminUsers = () => {
                         </div>
                       ) : (
                         <select
+                          aria-label={`Change role for ${u.name || u.email}`}
                           value={u.role}
                           onChange={(e) => handleRoleChange(u.id || u._id, e.target.value)}
                           style={{

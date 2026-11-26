@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { MotionConfig } from 'framer-motion';
 
 // Context Providers
 import { ThemeProvider } from './context/ThemeContext';
@@ -15,14 +16,14 @@ import AIFloatingChat from './components/AIFloatingChat';
 import RouteGuard from './components/RouteGuard';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// Primary Storefront Pages (Eager)
+// Primary Landing & Fallback Pages (Eager)
 import Home from './pages/Home';
-import Shop from './pages/Shop';
-import ProductDetail from './pages/ProductDetail';
-import Cart from './pages/Cart';
 import NotFound from './pages/NotFound';
 
-// Secondary, Auth & Admin Pages (Code-Split via React.lazy)
+// Storefront, Auth & Admin Pages (Code-Split via React.lazy)
+const Shop = React.lazy(() => import('./pages/Shop'));
+const ProductDetail = React.lazy(() => import('./pages/ProductDetail'));
+const Cart = React.lazy(() => import('./pages/Cart'));
 const Login = React.lazy(() => import('./pages/Login'));
 const Register = React.lazy(() => import('./pages/Register'));
 const PaymentResult = React.lazy(() => import('./pages/PaymentResult'));
@@ -62,7 +63,6 @@ const AppContent = () => {
     location.pathname === '/login' ||
     location.pathname === '/register' ||
     location.pathname === '/reset-password';
-  const isHomePage = location.pathname === '/';
 
   // Smooth scroll to top on every page change and disable browser scroll restoration
   React.useEffect(() => {
@@ -135,19 +135,21 @@ const AppContent = () => {
 
 const App = () => {
   return (
-    <Router>
-      <ThemeProvider>
-        <AuthProvider>
-          <CartProvider>
-            <ToastProvider>
-              <WishlistProvider>
-                <AppContent />
-              </WishlistProvider>
-            </ToastProvider>
-          </CartProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </Router>
+    <MotionConfig reducedMotion="user">
+      <Router>
+        <ThemeProvider>
+          <AuthProvider>
+            <CartProvider>
+              <ToastProvider>
+                <WishlistProvider>
+                  <AppContent />
+                </WishlistProvider>
+              </ToastProvider>
+            </CartProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </Router>
+    </MotionConfig>
   );
 };
 

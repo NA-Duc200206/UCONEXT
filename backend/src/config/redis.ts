@@ -7,8 +7,9 @@ export const redisClient = createClient({
   socket: {
     connectTimeout: 2000,
     reconnectStrategy: (retries) => {
-      if (retries > 2) return false;
-      return 500;
+      const maxRetries = process.env.NODE_ENV === 'production' ? 5 : 2;
+      if (retries > maxRetries) return false;
+      return Math.min(retries * 200, 5000);
     },
   },
 });

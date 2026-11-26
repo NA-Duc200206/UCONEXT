@@ -234,16 +234,13 @@ const AIFloatingChat = () => {
   }, []);
 
   useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus]);
-
-  useEffect(() => {
     if (isOpen && (!aiStatus || !aiStatus.configured)) {
       refreshStatus();
     }
   }, [isOpen, aiStatus, refreshStatus]);
 
   useEffect(() => {
+    if (!isOpen) return undefined;
     let cancelled = false;
 
     const loadConversation = async () => {
@@ -292,7 +289,7 @@ const AIFloatingChat = () => {
     return () => {
       cancelled = true;
     };
-  }, [userId, user?.name]);
+  }, [isOpen, userId, user?.name]);
 
   useEffect(() => {
     if (userId) return;
