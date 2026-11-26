@@ -10,6 +10,7 @@ import {
   resetInMemoryAiBudget,
 } from '../src/services/aiService';
 import { emailService } from '../src/services/emailService';
+import { logger } from '../src/config/logger';
 
 describe('llmClient & aiService helpers and session persistence', () => {
   beforeAll(async () => {
@@ -258,7 +259,7 @@ describe('llmClient & aiService helpers and session persistence', () => {
     vi.stubEnv('SMTP_USER', '');
     vi.stubEnv('SMTP_PASS', '');
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined as any);
 
     const sent = await emailService.sendPasswordResetEmail({
       to: 'prod@uconext.vn',

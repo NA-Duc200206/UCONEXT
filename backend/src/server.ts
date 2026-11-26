@@ -7,11 +7,16 @@ import { Server } from 'socket.io';
 
 import { createApp, createCorsOriginValidator } from './app';
 import { connectDB } from './config/db';
+import { logger } from './config/logger';
 import { connectRedis, redisClient } from './config/redis';
 import { seedDatabase } from './config/seed';
+import { flushSentry, initSentry } from './config/sentry';
 import { configureSocketAuth, setIO } from './config/socket';
-import { orderService } from './services/orderService';
 import { shouldAutoSeed, validateProductionEnv } from './config/security';
+import { emailQueue } from './jobs/emailQueue';
+import { createScheduledJob } from './jobs/scheduler';
+import { deliverMailNow } from './services/emailService';
+import { orderService } from './services/orderService';
 
 const PORT = process.env.PORT || 5000;
 const app = createApp();
@@ -31,11 +36,18 @@ configureSocketAuth(io);
 
 export { io };
 
-let vnpayExpiryInterval: NodeJS.Timeout | null = null;
+const vnpayExpiryJob = createScheduledJob({
+  name: 'expire-stale-vnpay-orders',
+  intervalMs: 60_000,
+  lockTtlMs: 50_000,
+  run: () => orderService.expireStaleVnpayOrders(),
+});
 
 // Boot Server
 const bootServer = async () => {
   try {
+    initSentry();
+
     const prodIssues = validateProductionEnv();
     if (prodIssues.length > 0) {
       throw new Error(`Invalid production configuration:\n- ${prodIssues.join('\n- ')}`);
@@ -47,37 +59,34 @@ const bootServer = async () => {
     if (process.env.NODE_ENV !== 'production' && shouldAutoSeed()) {
       await seedDatabase();
     } else {
-      console.log('ℹ️ Skipping automatic database seed (use explicit CLI `npm run seed --workspace=backend`).');
+      logger.info('Skipping automatic database seed (use explicit CLI `npm run seed --workspace=backend`)');
     }
 
-    vnpayExpiryInterval = setInterval(() => {
-      orderService.expireStaleVnpayOrders().catch((err) => {
-        console.error('Failed to expire stale VNPAY orders:', err?.message || err);
-      });
-    }, 60_000);
-    vnpayExpiryInterval.unref();
+    vnpayExpiryJob.start();
+    emailQueue.startWorker(deliverMailNow);
 
     server.listen(PORT, () => {
-      console.log(`✔ Server is running on http://localhost:${PORT}`);
+      logger.info({ port: PORT }, 'API server is listening');
     });
   } catch (err: any) {
-    console.error('❌ Failed to boot server:', err.message);
+    logger.fatal({ err }, 'Failed to boot server');
+    await flushSentry();
     process.exit(1);
   }
 };
 
 const shutdown = async (signal: string) => {
-  console.log(`\n⏳ Received ${signal}. Shutting down gracefully...`);
-  if (vnpayExpiryInterval) {
-    clearInterval(vnpayExpiryInterval);
-    vnpayExpiryInterval = null;
-  }
+  logger.info({ signal }, 'Received shutdown signal; closing server gracefully');
+  vnpayExpiryJob.stop();
+  emailQueue.stopWorker();
+
   server.close(async () => {
     try {
       await mongoose.disconnect();
       if (redisClient.isOpen) {
         await redisClient.quit();
       }
+      await flushSentry();
     } catch {
       // Ignore cleanup errors during shutdown
     }

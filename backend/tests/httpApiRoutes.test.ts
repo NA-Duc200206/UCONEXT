@@ -71,7 +71,7 @@ describe('Express HTTP routes, RBAC, CORS, domain endpoints, and upload security
     expect(getIO()).toBeNull();
   });
 
-  it('reports healthy MongoDB readiness on GET /api/health and enforces CORS origins', async () => {
+  it('reports minimal public /api/health, detailed internal /api/health/ready, and enforces CORS origins', async () => {
     const healthRes = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: 'http://localhost:3000' },
     });
@@ -79,8 +79,14 @@ describe('Express HTTP routes, RBAC, CORS, domain endpoints, and upload security
     expect(healthRes.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
 
     const healthBody: any = await healthRes.json();
-    expect(healthBody.status).toBe('ok');
-    expect(healthBody.db.connected).toBe(true);
+    expect(healthBody).toEqual({ status: 'ok' });
+
+    const readyRes = await fetch(`${baseUrl}/api/health/ready`);
+    expect(readyRes.status).toBe(200);
+    const readyBody: any = await readyRes.json();
+    expect(readyBody.status).toBe('ok');
+    expect(readyBody.db.connected).toBe(true);
+    expect(typeof readyBody.redis.connected).toBe('boolean');
 
     // Disallowed third-party origin must be rejected by CORS middleware
     const blockedRes = await fetch(`${baseUrl}/api/health`, {
@@ -324,12 +330,16 @@ describe('Express HTTP routes, RBAC, CORS, domain endpoints, and upload security
     createdUploadFiles.push(pngBody.imageUrl);
   });
 
-  it('returns 503 on GET /api/health when MongoDB is disconnected', async () => {
+  it('returns 503 on GET /api/health and /api/health/ready when MongoDB is disconnected', async () => {
     await mongoose.disconnect();
     const degradedRes = await fetch(`${baseUrl}/api/health`);
     expect(degradedRes.status).toBe(503);
-    const body: any = await degradedRes.json();
-    expect(body.status).toBe('degraded');
-    expect(body.db.connected).toBe(false);
+    expect(await degradedRes.json()).toEqual({ status: 'degraded' });
+
+    const readyDegradedRes = await fetch(`${baseUrl}/api/health/ready`);
+    expect(readyDegradedRes.status).toBe(503);
+    const readyBody: any = await readyDegradedRes.json();
+    expect(readyBody.status).toBe('degraded');
+    expect(readyBody.db.connected).toBe(false);
   });
 });
