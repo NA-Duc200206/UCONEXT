@@ -42,9 +42,9 @@
 Multi-product store/
 ├── backend/                # Express TypeScript API Backend
 │   ├── src/
-│   │   ├── app.ts          # Khởi tạo Express app & middleware (tách khỏi server)
-│   │   ├── server.ts       # Khởi chạy HTTP + Socket.IO server & background jobs
-│   │   ├── config/         # MongoDB, Redis, Security, Socket.IO, Seed data
+│   │   ├── server.ts       # Khởi tạo Express app, HTTP + Socket.IO server & background jobs
+│   │   ├── config/         # Env fail-closed, MongoDB, Redis, Security, Socket.IO, Seed data
+│   │   ├── scripts/        # CLI scripts (vd: seed.ts)
 │   │   ├── controllers/    # HTTP request/response handlers
 │   │   ├── middleware/     # JWT auth, RBAC, error handler
 │   │   ├── models/         # Mongoose Schemas & Indexes
@@ -77,15 +77,37 @@ Multi-product store/
 
 Yêu cầu: **Docker Engine** & **Docker Compose v2**.
 
+1. Tạo file `.env` từ mẫu production và thay các giá trị `__GEN__` bằng chuỗi ngẫu nhiên (tối thiểu 32 ký tự):
+
 ```bash
-docker compose up --build
+cp .env.production.example .env
+# Sinh secret ngẫu nhiên trên Linux/macOS:
+# openssl rand -hex 32
+```
+
+2. Khởi chạy stack (chế độ production mặc định không mở cổng `5000` của backend và tắt `AUTO_SEED`):
+
+```bash
+docker compose up -d --build --wait
+```
+
+Hoặc chạy chế độ **local development** (mở cổng `5000` và bật `AUTO_SEED=true`):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+3. Chạy seed tường minh qua CLI (khuyến nghị thay cho auto-seed):
+
+```bash
+npm run seed --workspace=backend
 ```
 
 Sau khi các container khởi động và pass healthcheck:
 - **Frontend (Nginx SPA + API/WS Proxy):** [http://localhost:3000](http://localhost:3000)
-- **Backend API & Healthcheck:** [http://localhost:5000/api/health](http://localhost:5000/api/health)
+- **Healthcheck qua Nginx:** [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-> **Lưu ý Production:** Trước khi triển khai thực tế, hãy ghi đè `JWT_SECRET`, `JWT_REFRESH_SECRET` (tối thiểu 24 ký tự mạnh), `CLIENT_URL`/`CORS_ORIGINS`, `VNPAY_HASH_SECRET` (nếu bật VNPAY) và đặt `AUTO_SEED=false`.
+> **Lưu ý Production:** Server sẽ **từ chối khởi động** ở `NODE_ENV=production` nếu thiếu hoặc dùng secret placeholder (`JWT_SECRET`, `JWT_REFRESH_SECRET` ≥ 32 ký tự, `SMTP_*`, `CLIENT_URL`/`CORS_ORIGINS`, và `VNPAY_*` khi `PAYMENTS_VNPAY_ENABLED=true`). Để chạy CLI seed ở production cần đặt `ALLOW_PROD_SEED=true` cùng `SEED_ADMIN_EMAIL` và `SEED_ADMIN_PASSWORD` (≥ 12 ký tự).
 
 ---
 
@@ -141,9 +163,9 @@ npm run build:frontend
 
 ---
 
-## Tài Khoản Trải Nghiệm Mẫu
+## Tài Khoản Trải Nghiệm Mẫu *(Chỉ dành cho Development)*
 
-Khi `AUTO_SEED=true` (mặc định ở chế độ development và Docker demo), hệ thống tự động tạo tài khoản mẫu:
+Chỉ ở môi trường `development` (không bao giờ được tạo ở `production` nếu không chạy CLI tường minh với `SEED_ADMIN_*`), khi bật `AUTO_SEED=true` hoặc chạy `npm run seed:dev --workspace=backend`, hệ thống tạo 2 tài khoản thử nghiệm:
 
 | Vai trò | Email | Mật khẩu |
 | :--- | :--- | :--- |
