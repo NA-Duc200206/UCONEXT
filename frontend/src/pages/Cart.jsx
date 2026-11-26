@@ -223,8 +223,8 @@ const Cart = () => {
       const orderItems = cart.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
-        color: item.color,
-        size: item.size,
+        color: item.color || undefined,
+        size: item.size || undefined,
       }));
 
       const locationPart = provinceCity.trim()

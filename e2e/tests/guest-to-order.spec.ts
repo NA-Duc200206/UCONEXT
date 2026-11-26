@@ -66,10 +66,18 @@ test.describe('Guest cart merge to COD checkout flow', () => {
 
     // 5. Complete COD checkout
     await page.getByRole('button', { name: /proceed to checkout/i }).click();
+    await page.getByPlaceholder(/David Nguyen/i).fill('E2E Shopper');
     await page.getByPlaceholder(/0912 345 678/i).fill('0901234567');
     await page.getByPlaceholder(/Hanoi \/ Ho Chi Minh City/i).fill('Ho Chi Minh City');
     await page.getByPlaceholder(/120 Tran Duy Hung/i).fill('88 Nguyen Hue, District 1');
-    await page.getByRole('button', { name: /place order \(cod\)/i }).click();
+
+    const [createOrderRes] = await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/api/orders') && res.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: /place order \(cod\)/i }).click(),
+    ]);
+    expect(createOrderRes.status(), await createOrderRes.text()).toBe(201);
 
     // 6. Verify payment result & order visibility on /orders
     await expect(page).toHaveURL(/\/payment-result\?method=cod&orderId=/);
