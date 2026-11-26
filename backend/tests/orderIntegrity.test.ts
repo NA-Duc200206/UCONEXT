@@ -12,6 +12,9 @@ describe('orderIntegrity (transactions, concurrency, coupon redemptions, strict 
   let replSet: MongoMemoryReplSet;
 
   beforeAll(async () => {
+    process.env.PAYMENTS_VNPAY_ENABLED = 'true';
+    process.env.VNPAY_TMN_CODE = 'TESTTMN1';
+    process.env.VNPAY_HASH_SECRET = 'test_vnpay_secret_key_1234567890_secure';
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
     await mongoose.connect(replSet.getUri());
     // Ensure collections and unique indexes exist before starting multi-doc transactions

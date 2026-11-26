@@ -9,6 +9,7 @@ import { emailService } from './emailService';
 import { cacheService } from '../utils/cache';
 import { auditService } from './auditService';
 import { disconnectUserSockets } from '../config/socket';
+import { getJwtSecret, getJwtRefreshSecret } from '../config/env';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const PHONE_REGEX = /^[0-9+\-\s()]{8,20}$/;
@@ -54,14 +55,6 @@ function mapFirebaseProvider(
 
 const RESET_TOKEN_TTL_MINUTES = 15;
 const MAX_REFRESH_SESSIONS = 5;
-
-function getJwtSecret(): string {
-  return process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026';
-}
-
-function getJwtRefreshSecret(): string {
-  return process.env.JWT_REFRESH_SECRET || getJwtSecret();
-}
 
 function hashToken(rawToken: string): string {
   return crypto.createHash('sha256').update(rawToken).digest('hex');

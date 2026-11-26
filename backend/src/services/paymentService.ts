@@ -5,6 +5,7 @@ import { Order, Product, Coupon, CouponRedemption, PaymentTransaction } from '..
 import { withTransaction } from '../config/db';
 import { emitOrderEvent, getIO } from '../config/socket';
 import { emailService } from './emailService';
+import { getVnpayConfig } from '../config/env';
 import { auditService } from './auditService';
 
 const DEFAULT_PAYMENT_WINDOW_MS = 15 * 60 * 1000;
@@ -239,12 +240,24 @@ function normalizeClientIp(rawIp: string | string[] | undefined): string {
 }
 
 export const paymentService = {
+  getAvailableMethods() {
+    return {
+      cod: true,
+      vnpay: Boolean(getVnpayConfig()),
+    };
+  },
+
   async createPaymentUrl(
     orderId: string,
     ipAddr: string | string[],
     requesterId?: string,
     requesterRole?: string
   ) {
+    const vnpayConfig = getVnpayConfig();
+    if (!vnpayConfig) {
+      throw createPaymentError('VNPAY payment gateway is currently unavailable.', 503);
+    }
+
     if (!Types.ObjectId.isValid(orderId)) {
       throw createPaymentError('Order does not exist.', 404);
     }
@@ -285,10 +298,7 @@ export const paymentService = {
       );
     }
 
-    const tmnCode = process.env.VNPAY_TMN_CODE || 'mock_tmn_code';
-    const secretKey = process.env.VNPAY_HASH_SECRET || 'mock_hash_secret';
-    const vnpUrl = process.env.VNPAY_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-    const returnUrl = process.env.VNPAY_RETURN_URL || 'http://localhost:3000/payment-result';
+    const { tmnCode, hashSecret: secretKey, url: vnpUrl, returnUrl } = vnpayConfig;
 
     const createDate = getVnpayDateFormat(now);
     const effectiveExpireMs = Math.min(now.getTime() + DEFAULT_PAYMENT_WINDOW_MS, orderDeadline.getTime());
@@ -331,6 +341,11 @@ export const paymentService = {
   },
 
   async verifyPayment(queryParams: any) {
+    const vnpayConfig = getVnpayConfig();
+    if (!vnpayConfig) {
+      throw createPaymentError('VNPAY payment gateway is currently unavailable.', 503);
+    }
+
     const rawQuery: Record<string, any> = { ...(queryParams || {}) };
     let vnp_Params: Record<string, any> = { ...rawQuery };
     const secureHash = vnp_Params['vnp_SecureHash'];
@@ -348,8 +363,7 @@ export const paymentService = {
 
     vnp_Params = sortObject(vnp_Params);
 
-    const expectedTmnCode = process.env.VNPAY_TMN_CODE || 'mock_tmn_code';
-    const secretKey = process.env.VNPAY_HASH_SECRET || 'mock_hash_secret';
+    const { tmnCode: expectedTmnCode, hashSecret: secretKey } = vnpayConfig;
     const signData = qs.stringify(vnp_Params, { encode: false });
     const checkHash = generateHmacSha512(secretKey, signData);
     const hashValid = verifySecureHash(secureHash, checkHash);
@@ -437,6 +451,11 @@ export const paymentService = {
   },
 
   async handleIpn(queryParams: any) {
+    const vnpayConfig = getVnpayConfig();
+    if (!vnpayConfig) {
+      return { RspCode: '99', Message: 'Payment gateway disabled' };
+    }
+
     const rawQuery: Record<string, any> = { ...(queryParams || {}) };
     let vnp_Params: Record<string, any> = { ...rawQuery };
     const secureHash = vnp_Params['vnp_SecureHash'];
@@ -454,8 +473,7 @@ export const paymentService = {
 
     vnp_Params = sortObject(vnp_Params);
 
-    const expectedTmnCode = process.env.VNPAY_TMN_CODE || 'mock_tmn_code';
-    const secretKey = process.env.VNPAY_HASH_SECRET || 'mock_hash_secret';
+    const { tmnCode: expectedTmnCode, hashSecret: secretKey } = vnpayConfig;
     const signData = qs.stringify(vnp_Params, { encode: false });
     const checkHash = generateHmacSha512(secretKey, signData);
     const hashValid = verifySecureHash(secureHash, checkHash);

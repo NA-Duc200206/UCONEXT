@@ -28,6 +28,7 @@ function signVnpayParams(params: Record<string, any>, secret = TEST_SECRET) {
 
 describe('paymentService (VNPAY security, merchant verification, deadlines & reconciliation)', () => {
   beforeAll(async () => {
+    process.env.PAYMENTS_VNPAY_ENABLED = 'true';
     process.env.VNPAY_HASH_SECRET = TEST_SECRET;
     process.env.VNPAY_TMN_CODE = TEST_TMN;
     await connectTestDB();
@@ -39,6 +40,7 @@ describe('paymentService (VNPAY security, merchant verification, deadlines & rec
   afterEach(async () => {
     await clearTestDB();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     socketConfig.setIO(null);
   });
 
@@ -304,5 +306,39 @@ describe('paymentService (VNPAY security, merchant verification, deadlines & rec
 
     // Subsequent duplicate IPN gets 02
     expect((await paymentService.handleIpn(latePaidIpn)).RspCode).toBe('02');
+  });
+
+  it('refuses VNPAY order creation and callbacks with 503 when VNPAY is disabled', async () => {
+    const { owner, product, order } = await createVnpayOrderFixture('cod');
+
+    vi.stubEnv('PAYMENTS_VNPAY_ENABLED', 'false');
+    expect(paymentService.getAvailableMethods()).toEqual({ cod: true, vnpay: false });
+
+    await expect(
+      orderService.createOrder(owner._id.toString(), {
+        items: [{ productId: product._id.toString(), quantity: 1 }],
+        shippingAddress: '456 Le Loi, HCMC',
+        paymentMethod: 'vnpay',
+      })
+    ).rejects.toMatchObject({ statusCode: 503 });
+
+    await expect(
+      paymentService.createPaymentUrl(order.id.toString(), '127.0.0.1', owner._id.toString())
+    ).rejects.toMatchObject({ statusCode: 503 });
+
+    const forged = signVnpayParams(
+      {
+        vnp_TxnRef: `${order.id}-1`,
+        vnp_ResponseCode: '00',
+        vnp_Amount: String(order.totalAmount * 100),
+      },
+      'mock_hash_secret'
+    );
+
+    await expect(paymentService.verifyPayment(forged)).rejects.toMatchObject({ statusCode: 503 });
+    expect(await paymentService.handleIpn(forged)).toEqual({
+      RspCode: '99',
+      Message: 'Payment gateway disabled',
+    });
   });
 });

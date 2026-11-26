@@ -19,6 +19,7 @@ describe('orderService', () => {
   afterEach(async () => {
     await clearTestDB();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   afterAll(async () => {
@@ -277,6 +278,9 @@ describe('orderService', () => {
     expect((await Product.findById(limited._id))?.stock).toBe(10);
 
     // Concurrent checkouts: 3 buyers each requesting 6 units from stock 10 => at most 1 succeeds
+    vi.stubEnv('PAYMENTS_VNPAY_ENABLED', 'true');
+    vi.stubEnv('VNPAY_TMN_CODE', 'TESTTMN1');
+    vi.stubEnv('VNPAY_HASH_SECRET', 'test_vnpay_secret_key_1234567890_secure');
     const results = await Promise.allSettled([
       orderService.createOrder(user._id.toString(), {
         items: [{ productId: limited._id.toString(), quantity: 6 }],
@@ -306,6 +310,9 @@ describe('orderService', () => {
   });
 
   it('expires stale unpaid VNPAY orders and restores stock and coupon usage', async () => {
+    vi.stubEnv('PAYMENTS_VNPAY_ENABLED', 'true');
+    vi.stubEnv('VNPAY_TMN_CODE', 'TESTTMN1');
+    vi.stubEnv('VNPAY_HASH_SECRET', 'test_vnpay_secret_key_1234567890_secure');
     const { user, product, coupon } = await seedOrderFixtures();
 
     const staleVnpay = await orderService.createOrder(user._id.toString(), {

@@ -1,6 +1,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User } from '../models';
+import { getJwtSecret } from './env';
 
 let ioInstance: SocketIOServer | null = null;
 
@@ -29,10 +30,7 @@ export const configureSocketAuth = (io: SocketIOServer) => {
         return next();
       }
 
-      const decoded: any = jwt.verify(
-        rawAuthToken,
-        process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026'
-      );
+      const decoded: any = jwt.verify(rawAuthToken, getJwtSecret());
       if (decoded?.id) {
         const user = await User.findById(decoded.id).select('_id role tokenVersion').lean();
         const userTokenVersion = typeof user?.tokenVersion === 'number' ? user.tokenVersion : 0;
