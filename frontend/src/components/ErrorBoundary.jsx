@@ -1,4 +1,5 @@
 import React from 'react';
+import { captureFrontendException } from '../config/sentry';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,6 +13,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('Application render error:', error, errorInfo);
+    captureFrontendException(error, { componentStack: errorInfo?.componentStack });
   }
 
   handleReload = () => {

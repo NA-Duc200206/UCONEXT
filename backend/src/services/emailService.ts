@@ -1,9 +1,11 @@
 import nodemailer, { Transporter } from 'nodemailer';
+import { logger } from '../config/logger';
+import { emailQueue, EmailJobPayload } from '../jobs/emailQueue';
 
 /**
- * Email Notification Service for UCONEXT
- * Supports real SMTP delivery via Nodemailer when SMTP_* env vars are configured,
- * with a structured console-log fallback for local development.
+ * Email Notification Service for UCONEXT.
+ * Enqueues transactional emails onto EmailQueue (Redis list with 5x exponential backoff)
+ * so checkout and auth flows never fail when an upstream SMTP relay hiccups.
  */
 
 interface OrderNotificationData {
@@ -20,15 +22,6 @@ interface PasswordResetEmailData {
   name: string;
   resetUrl: string;
   expiresInMinutes: number;
-}
-
-interface MailPayload {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-  consoleTag: string;
-  consoleLines: string[];
 }
 
 let cachedTransporter: Transporter | null = null;
@@ -48,8 +41,8 @@ function getTransporter(): Transporter | null {
     secure: port === 465,
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
+      pass: process.env.SMTP_PASS,
+    },
   });
 
   return cachedTransporter;
@@ -64,20 +57,27 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-async function deliverMail(payload: MailPayload): Promise<boolean> {
+export function resetEmailTransporterForTests(): void {
+  cachedTransporter = null;
+}
+
+export async function deliverMailNow(payload: EmailJobPayload): Promise<boolean> {
   try {
     const transporter = getTransporter();
     if (!transporter) {
       if (process.env.NODE_ENV === 'production') {
-        console.error(`❌ SMTP is not configured in production; skipping ${payload.consoleTag} delivery.`);
+        logger.error({ tag: payload.consoleTag }, 'SMTP is not configured in production; skipping email delivery');
         return false;
       }
-      console.log(`\n==================================================`);
-      console.log(`📧 [EMAIL SERVICE - DEV FALLBACK] ${payload.consoleTag}`);
-      console.log(`To: ${payload.to}`);
-      console.log(`Subject: ${payload.subject}`);
-      payload.consoleLines.forEach((line) => console.log(line));
-      console.log(`==================================================\n`);
+      logger.info(
+        {
+          tag: payload.consoleTag,
+          to: payload.to,
+          subject: payload.subject,
+          details: payload.consoleLines,
+        },
+        'Email dev fallback delivery'
+      );
       return true;
     }
 
@@ -87,18 +87,33 @@ async function deliverMail(payload: MailPayload): Promise<boolean> {
       to: payload.to,
       subject: payload.subject,
       text: payload.text,
-      html: payload.html
+      html: payload.html,
     });
     return true;
   } catch (err: any) {
-    console.error(`❌ Failed to send ${payload.consoleTag} email:`, err.message);
+    logger.error({ err, tag: payload.consoleTag }, 'Failed to send transactional email');
+    return false;
+  }
+}
+
+async function enqueueMail(payload: EmailJobPayload): Promise<boolean> {
+  if (process.env.NODE_ENV === 'production' && !isSmtpConfigured()) {
+    logger.error({ tag: payload.consoleTag }, 'SMTP is not configured in production; rejecting email enqueue');
+    return false;
+  }
+
+  try {
+    await emailQueue.enqueue(payload);
+    return true;
+  } catch (err: any) {
+    logger.error({ err, tag: payload.consoleTag }, 'Failed to enqueue transactional email');
     return false;
   }
 }
 
 export const emailService = {
   /**
-   * Send order confirmation email to customer
+   * Queue order confirmation email to customer
    */
   async sendOrderConfirmation(data: OrderNotificationData): Promise<boolean> {
     const formattedTotal = `${data.totalAmount.toLocaleString('vi-VN')} VND`;
@@ -110,7 +125,7 @@ export const emailService = {
       )
       .join('');
 
-    return deliverMail({
+    return enqueueMail({
       to: data.customerEmail,
       subject: `UCONEXT — Order Confirmation #${data.orderId}`,
       text: [
@@ -118,7 +133,7 @@ export const emailService = {
         `Your order #${data.orderId} has been received.`,
         `Total: ${formattedTotal}`,
         `Items: ${itemsSummary}`,
-        `Delivery Address: ${data.shippingAddress}`
+        `Delivery Address: ${data.shippingAddress}`,
       ].join('\n'),
       html: `
         <div style="font-family: 'Plus Jakarta Sans', Inter, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
@@ -137,17 +152,17 @@ export const emailService = {
         `Order ID: #${data.orderId}`,
         `Total: ${formattedTotal}`,
         `Items: ${itemsSummary}`,
-        `Delivery Address: ${data.shippingAddress}`
-      ]
+        `Delivery Address: ${data.shippingAddress}`,
+      ],
     });
   },
 
   /**
-   * Send order status update email
+   * Queue order status update email
    */
   async sendOrderStatusUpdate(customerEmail: string, orderId: string, status: string): Promise<boolean> {
     const normalizedStatus = status.toUpperCase();
-    return deliverMail({
+    return enqueueMail({
       to: customerEmail,
       subject: `UCONEXT — Order #${orderId} Update: ${normalizedStatus}`,
       text: `Your order #${orderId} status has been updated to: ${normalizedStatus}.`,
@@ -161,15 +176,15 @@ export const emailService = {
         </div>
       `,
       consoleTag: 'ORDER STATUS UPDATE',
-      consoleLines: [`Order ID: #${orderId}`, `New Status: ${normalizedStatus}`]
+      consoleLines: [`Order ID: #${orderId}`, `New Status: ${normalizedStatus}`],
     });
   },
 
   /**
-   * Send password reset link email
+   * Queue password reset link email
    */
   async sendPasswordResetEmail(data: PasswordResetEmailData): Promise<boolean> {
-    return deliverMail({
+    return enqueueMail({
       to: data.to,
       subject: 'UCONEXT — Reset Your Password',
       text: [
@@ -177,7 +192,7 @@ export const emailService = {
         `We received a request to reset your UCONEXT password.`,
         `Open this link within ${data.expiresInMinutes} minutes to set a new password:`,
         data.resetUrl,
-        `If you did not request this, you can safely ignore this email.`
+        `If you did not request this, you can safely ignore this email.`,
       ].join('\n'),
       html: `
         <div style="font-family: 'Plus Jakarta Sans', Inter, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
@@ -197,8 +212,8 @@ export const emailService = {
       consoleLines: [
         `User: ${data.name}`,
         `Reset URL: ${data.resetUrl}`,
-        `Expires In: ${data.expiresInMinutes} minutes`
-      ]
+        `Expires In: ${data.expiresInMinutes} minutes`,
+      ],
     });
-  }
+  },
 };

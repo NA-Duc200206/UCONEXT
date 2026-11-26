@@ -116,9 +116,10 @@ jobs:
       - name: Build and start Docker Compose stack
         run: docker compose up -d --build --wait
 
-      - name: Verify health endpoint through Nginx edge and ensure backend port is not exposed
+      - name: Verify health endpoint, cache headers, and backend port isolation
         run: |
           curl -fsS http://localhost:3000/api/health | grep '"status":"ok"'
+          curl -fsSI http://localhost:3000/ | grep -iq 'cache-control:.*no-cache'
           if curl -fsS http://localhost:5000/api/health >/dev/null 2>&1; then
             echo "Backend port 5000 should not be published on host"
             exit 1

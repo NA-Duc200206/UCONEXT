@@ -1,11 +1,11 @@
-import express, { Express } from 'express';
+import express, { Express, Request } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import mongoose from 'mongoose';
 import path from 'path';
 
+import { createHttpLogger } from './config/logger';
 import { redisClient } from './config/redis';
 import { isOriginAllowed, parseAllowedOrigins } from './config/security';
 import authRoutes from './routes/authRoutes';
@@ -20,10 +20,31 @@ import reviewRoutes from './routes/reviewRoutes';
 import wishlistRoutes from './routes/wishlistRoutes';
 import aiRoutes from './routes/aiRoutes';
 import { errorHandler } from './middleware/errorHandler';
-import { globalLimiter, parseTrustProxyHops } from './middleware/rateLimits';
+import { getTrustedClientIp, globalLimiter, parseTrustProxyHops } from './middleware/rateLimits';
 
 export interface CreateAppOptions {
   disableRateLimit?: boolean;
+}
+
+function isInternalRequest(req: Request): boolean {
+  const readyToken = process.env.HEALTH_READY_TOKEN?.trim();
+  if (readyToken && req.headers['x-health-token'] === readyToken) {
+    return true;
+  }
+
+  const ip = getTrustedClientIp(req);
+  if (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === 'localhost' ||
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function createCorsOriginValidator() {
@@ -45,7 +66,6 @@ export function createCorsOriginValidator() {
 
 export function createApp(opts: CreateAppOptions = {}): Express {
   const app = express();
-  const isProduction = process.env.NODE_ENV === 'production';
   const corsOriginValidator = createCorsOriginValidator();
 
   const trustProxyHops = parseTrustProxyHops();
@@ -70,7 +90,7 @@ export function createApp(opts: CreateAppOptions = {}): Express {
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-  app.use(morgan(isProduction ? 'combined' : 'dev'));
+  app.use(createHttpLogger());
 
   // Static files for uploads
   app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
@@ -98,12 +118,25 @@ export function createApp(opts: CreateAppOptions = {}): Express {
     res.json({ message: 'Welcome to UCONEXT Enterprise TS API Server', status: 'Running' });
   });
 
+  // Public liveness/health probe (minimal surface — never exposes internal DB/Redis topology)
   app.get('/api/health', (_req, res) => {
+    const dbConnected = mongoose.connection.readyState === 1;
+    res.status(dbConnected ? 200 : 503).json({
+      status: dbConnected ? 'ok' : 'degraded',
+    });
+  });
+
+  // Internal readiness probe with DB & Redis diagnostics (restricted to internal network or token in production)
+  app.get('/api/health/ready', (req, res) => {
+    if (process.env.NODE_ENV === 'production' && !isInternalRequest(req)) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Internal readiness endpoint.' });
+    }
+
     const dbReadyState = mongoose.connection.readyState;
     const dbConnected = dbReadyState === 1;
     const statusCode = dbConnected ? 200 : 503;
 
-    res.status(statusCode).json({
+    return res.status(statusCode).json({
       status: dbConnected ? 'ok' : 'degraded',
       environment: process.env.NODE_ENV || 'development',
       uptimeSeconds: Math.round(process.uptime()),

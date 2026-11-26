@@ -10,6 +10,7 @@ import { cacheService } from '../utils/cache';
 import { auditService } from './auditService';
 import { disconnectUserSockets } from '../config/socket';
 import { getJwtSecret, getJwtRefreshSecret } from '../config/env';
+import { logger } from '../config/logger';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const PHONE_REGEX = /^[0-9+\-\s()]{8,20}$/;
@@ -186,7 +187,7 @@ export const authService = {
         ipAddress: ipAddress || ''
       });
     } catch (logErr) {
-      console.error('Failed to create login audit log:', logErr);
+      logger.error({ err: logErr }, 'Failed to create login audit log');
     }
 
     return { token, refreshToken, user: formattedUser };
@@ -232,7 +233,7 @@ export const authService = {
         ipAddress: ipAddress || ''
       });
     } catch (logErr) {
-      console.error('Failed to create registration audit log:', logErr);
+      logger.error({ err: logErr }, 'Failed to create registration audit log');
     }
 
     return { token, refreshToken, user: formattedUser };
@@ -383,7 +384,7 @@ export const authService = {
         ipAddress: ''
       });
     } catch (logErr) {
-      console.error('Failed to create password change audit log:', logErr);
+      logger.error({ err: logErr }, 'Failed to create password change audit log');
     }
 
     return true;
@@ -617,7 +618,7 @@ export const authService = {
           ipAddress: ''
         });
       } catch (logErr) {
-        console.error('Failed to create refresh reuse audit log:', logErr);
+        logger.error({ err: logErr }, 'Failed to create refresh reuse audit log');
       }
 
       const error: any = new Error('Refresh token has been revoked.');
@@ -645,7 +646,7 @@ export const authService = {
         ipAddress: ipAddress || ''
       });
     } catch (logErr) {
-      console.error('Failed to create logout-all audit log:', logErr);
+      logger.error({ err: logErr }, 'Failed to create logout-all audit log');
     }
 
     return true;
@@ -701,7 +702,7 @@ export const authService = {
     };
     setImmediate(() => {
       emailService.sendPasswordResetEmail(emailPayload).catch((err) => {
-        console.error('Failed to send password reset email:', err?.message || err);
+        logger.error({ err }, 'Failed to send password reset email');
       });
     });
 
@@ -748,7 +749,7 @@ export const authService = {
         ipAddress: ipAddress || ''
       });
     } catch (logErr) {
-      console.error('Failed to create password reset audit log:', logErr);
+      logger.error({ err: logErr }, 'Failed to create password reset audit log');
     }
 
     return true;
@@ -848,7 +849,7 @@ export const authService = {
         ipAddress: ipAddress || ''
       });
     } catch (logErr) {
-      console.error('Failed to create Firebase auth audit log:', logErr);
+      logger.error({ err: logErr }, 'Failed to create Firebase auth audit log');
     }
 
     return { token, refreshToken, user: formattedUser };
