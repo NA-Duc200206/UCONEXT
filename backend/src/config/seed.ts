@@ -13,25 +13,38 @@ import {
 } from './seedProducts';
 
 export const seedDatabase = async () => {
-  try {
-    // 1. Seed Users (upsert so _id and linked orders/reviews/sessions persist across restarts)
-    await User.deleteMany({ email: { $in: ['admin@novacommerce.com', 'customer@novacommerce.com'] } });
+  const isProduction = process.env.NODE_ENV === 'production';
 
-    const [existingAdmin, existingCustomer] = await Promise.all([
-      User.findOne({ email: 'admin@glowstore.com' }),
-      User.findOne({ email: 'customer@glowstore.com' }),
-    ]);
+  // 1. Seed Users (idempotent upsert only — never deletes existing records)
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL || (isProduction ? '' : 'admin@glowstore.com'))
+    .trim()
+    .toLowerCase();
+  const adminPasswordRaw = process.env.SEED_ADMIN_PASSWORD || (isProduction ? '' : 'admin123');
+
+  if (isProduction) {
+    if (!adminEmail || !adminPasswordRaw || adminPasswordRaw.length < 12) {
+      throw new Error(
+        'SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD (at least 12 characters) are required when seeding in production.'
+      );
+    }
+  }
+
+  try {
+    const existingAdmin = await User.findOne({ email: adminEmail });
+    const existingCustomer = isProduction
+      ? true
+      : await User.findOne({ email: 'customer@glowstore.com' });
 
     if (!existingAdmin || !existingCustomer) {
       const salt = await bcrypt.genSalt(12);
       if (!existingAdmin) {
-        const adminPassword = await bcrypt.hash('admin123', salt);
+        const adminPassword = await bcrypt.hash(adminPasswordRaw, salt);
         await User.findOneAndUpdate(
-          { email: 'admin@glowstore.com' },
+          { email: adminEmail },
           {
             $setOnInsert: {
               name: 'UCONEXT Admin',
-              email: 'admin@glowstore.com',
+              email: adminEmail,
               password: adminPassword,
               role: 'admin',
               cart: [],
@@ -41,7 +54,7 @@ export const seedDatabase = async () => {
           { upsert: true, returnDocument: 'after' }
         );
       }
-      if (!existingCustomer) {
+      if (!isProduction && !existingCustomer) {
         const customerPassword = await bcrypt.hash('customer123', salt);
         await User.findOneAndUpdate(
           { email: 'customer@glowstore.com' },
@@ -59,21 +72,9 @@ export const seedDatabase = async () => {
         );
       }
     }
-    console.log('✔ Verified seed users: admin@glowstore.com / customer@glowstore.com');
+    console.log(`✔ Verified seed admin user: ${adminEmail}`);
 
-    // 2. Seed Categories & Products
-    const categoryCount = await Category.countDocuments();
-    const productCount = await Product.countDocuments();
-
-    // If database is clean or contains only the old small dataset (less than 10 products), wipe and re-seed
-    if (productCount < 10) {
-      console.log('🔄 Wiping existing categories, products, and orders to seed rich dataset...');
-      await Category.deleteMany({});
-      await Product.deleteMany({});
-      await Order.deleteMany({});
-    }
-
-    // 2. Seed / Upsert 15 Specific Categories
+    // 2. Seed / Upsert 15 Specific Categories (never deletes existing data)
     const categoryDefinitions: Array<{ key: CategoryKey; name: string; slug: string; description: string }> = [
       { key: 'laptopsTablets', name: 'Laptops, Tablets', slug: 'laptops-tablets', description: 'Ultrabooks, tablets, and e-readers built for portable power.' },
       { key: 'monitorsDesk', name: 'Monitors, Desk', slug: 'monitors-desk', description: 'Studio displays, mechanical keyboards, and precision mice.' },
@@ -554,30 +555,9 @@ export const seedDatabase = async () => {
       console.log(`✔ Seeded ${missingProducts.length} additional products into catalog`);
     }
 
-    // Remove legacy broad categories if no products remain on them
-    const legacySlugs = [
-      'cosmetics',
-      'accessories',
-      'electronics',
-      'computing',
-      'tech-gear',
-      'bags-eyewear',
-      'fashion',
-      'beauty',
-    ];
-    for (const oldSlug of legacySlugs) {
-      const oldCat = await Category.findOne({ slug: oldSlug });
-      if (oldCat) {
-        const count = await Product.countDocuments({ categoryId: oldCat._id as any });
-        if (count === 0) {
-          await Category.deleteOne({ _id: oldCat._id });
-        }
-      }
-    }
-
-    // 4. Seed Orders (Historical Transactions)
+    // 4. Seed Historical Demo Orders (development/test only, and only if no orders exist)
     const orderCount = await Order.countDocuments();
-    if (orderCount === 0) {
+    if (!isProduction && orderCount === 0) {
       const customers = await User.find({ role: 'customer' });
       const productsList = await Product.find({ isDeleted: false });
 

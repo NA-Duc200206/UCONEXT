@@ -142,10 +142,10 @@ const bootServer = async () => {
     await connectDB();
     await connectRedis();
 
-    if (shouldAutoSeed()) {
+    if (process.env.NODE_ENV !== 'production' && shouldAutoSeed()) {
       await seedDatabase();
     } else {
-      console.log('ℹ️ Skipping automatic database seed (disabled in production unless AUTO_SEED=true).');
+      console.log('ℹ️ Skipping automatic database seed (use explicit CLI `npm run seed --workspace=backend`).');
     }
 
     vnpayExpiryInterval = setInterval(() => {

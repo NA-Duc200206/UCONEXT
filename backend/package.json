@@ -10,6 +10,8 @@
     "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "seed": "node dist/scripts/seed.js",
+    "seed:dev": "ts-node-dev --transpile-only src/scripts/seed.ts",
     "seed:images": "ts-node-dev --transpile-only --no-notify src/scripts/fetchUnsplashImages.ts"
   },
   "dependencies": {
