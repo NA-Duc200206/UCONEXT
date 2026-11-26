@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 const ToastContext = createContext();
@@ -13,24 +13,29 @@ const STATUS_ICONS = {
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
 
-  const removeToast = (id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
-  const showToast = (message, type = 'success', duration = 2200) => {
-    const id = Date.now() + Math.random().toString(36).substr(2, 9);
-    const newToast = { id, message, type };
+  const showToast = useCallback(
+    (message, type = 'success', duration = 2200) => {
+      const id = Date.now() + Math.random().toString(36).substr(2, 9);
+      const newToast = { id, message, type };
 
-    // Show only the latest status pill cleanly at top-center instead of stacking bottom-right bars
-    setToasts([newToast]);
+      // Show only the latest status pill cleanly at top-center instead of stacking bottom-right bars
+      setToasts([newToast]);
 
-    setTimeout(() => {
-      removeToast(id);
-    }, duration);
-  };
+      setTimeout(() => {
+        removeToast(id);
+      }, duration);
+    },
+    [removeToast]
+  );
+
+  const value = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       {toasts.length > 0 && (
         <div className="status-pill-container" role="status" aria-live="polite">

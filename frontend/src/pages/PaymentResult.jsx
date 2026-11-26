@@ -43,6 +43,9 @@ const PaymentResult = () => {
     }());
   };
 
+  const restoreCartRef = React.useRef(restoreCartIfEmpty);
+  restoreCartRef.current = restoreCartIfEmpty;
+
   useEffect(() => {
     const restorePendingVnpayCart = async () => {
       try {
@@ -51,7 +54,7 @@ const PaymentResult = () => {
           sessionStorage.removeItem('uconext_pending_vnpay_cart');
           const parsed = JSON.parse(rawSnapshot);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            await restoreCartIfEmpty(parsed);
+            await restoreCartRef.current(parsed);
           }
         }
       } catch {
@@ -106,7 +109,7 @@ const PaymentResult = () => {
     };
 
     verifyVnpay();
-  }, [searchParams]);
+  }, [searchParams, showToast]);
 
   if (loading) {
     return (

@@ -43,7 +43,7 @@ const AdminDashboard = () => {
     };
 
     loadDashboardStats();
-  }, [isAdmin]);
+  }, [isAdmin, navigate, showToast]);
 
   if (loading) {
     return (

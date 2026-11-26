@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -35,16 +35,7 @@ const AdminCoupons = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [formData, setFormData] = useState(defaultFormState);
 
-  useEffect(() => {
-    if (!isAdmin) {
-      showToast('Access denied. Administrator privileges required.', 'error');
-      navigate('/');
-      return;
-    }
-    loadCoupons();
-  }, [isAdmin]);
-
-  const loadCoupons = async () => {
+  const loadCoupons = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.coupons.getAll();
@@ -54,7 +45,16 @@ const AdminCoupons = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      showToast('Access denied. Administrator privileges required.', 'error');
+      navigate('/');
+      return;
+    }
+    loadCoupons();
+  }, [isAdmin, loadCoupons, navigate, showToast]);
 
   const openCreateModal = () => {
     setModalMode('create');
