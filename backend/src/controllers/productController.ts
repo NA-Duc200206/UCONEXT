@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { productService } from '../services/productService';
+import { sendSafeError } from '../middleware/errorHandler';
 
 export const productController = {
   async getRecommended(req: AuthenticatedRequest, res: Response) {
@@ -9,21 +10,15 @@ export const productController = {
       const result = await productService.getRecommended(req.user, limitParam);
       return res.status(200).json(result);
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve recommended products.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
   async getAll(req: Request, res: Response) {
     try {
-      const result = await productService.getAll(req.query);
+      const result = await productService.getAll(req.query as any);
       return res.status(200).json(result);
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve products.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -33,10 +28,7 @@ export const productController = {
       const result = await productService.getById(id);
       return res.status(200).json({ product: result });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve product details.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -45,10 +37,7 @@ export const productController = {
       const product = await productService.create(req.body, req.user?._id?.toString(), req.ip);
       return res.status(201).json({ message: 'Product added successfully.', product });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to add product.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -58,10 +47,7 @@ export const productController = {
       const product = await productService.update(id, req.body, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Product updated successfully.', product });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to update product.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -71,10 +57,7 @@ export const productController = {
       await productService.delete(id, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Product deleted successfully.' });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to delete product.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   }
 };

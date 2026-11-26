@@ -200,7 +200,10 @@ describe('orderService', () => {
       orderService.requestRefund(order.id.toString(), user._id.toString(), 'Changed mind')
     ).rejects.toMatchObject({ statusCode: 400 });
 
-    // Admin marks completed => paymentStatus becomes paid
+    // Admin advances order through valid lifecycle -> delivered -> completed => paymentStatus becomes paid
+    await orderService.updateOrderStatus(order.id.toString(), 'confirmed');
+    await orderService.updateOrderStatus(order.id.toString(), 'shipping');
+    await orderService.updateOrderStatus(order.id.toString(), 'delivered');
     const completed = await orderService.updateOrderStatus(order.id.toString(), 'completed');
     expect(completed.status).toBe('completed');
     expect(completed.paymentStatus).toBe('paid');
@@ -219,8 +222,8 @@ describe('orderService', () => {
     expect(refunded.status).toBe('refund_requested');
     expect(refunded.statusHistory.at(-1)?.note).toContain('Item arrived damaged');
 
-    // Admin cancels => restocks product & restores coupon
-    await orderService.updateOrderStatus(order.id.toString(), 'cancelled');
+    // Admin completes refund => restocks product & restores coupon
+    await orderService.updateOrderStatus(order.id.toString(), 'refund_completed');
     expect((await Product.findById(product._id))?.stock).toBe(10);
     expect((await Coupon.findById(coupon._id))?.usedCount).toBe(0);
   });
@@ -275,18 +278,24 @@ describe('orderService', () => {
     expect((await Product.findById(limited._id))?.stock).toBe(10);
 
     // Concurrent checkouts: 3 buyers each requesting 6 units from stock 10 => at most 1 succeeds
+    vi.stubEnv('PAYMENTS_VNPAY_ENABLED', 'true');
+    vi.stubEnv('VNPAY_TMN_CODE', 'TESTTMN1');
+    vi.stubEnv('VNPAY_HASH_SECRET', 'test_vnpay_secret_key_1234567890_secure');
     const results = await Promise.allSettled([
       orderService.createOrder(user._id.toString(), {
         items: [{ productId: limited._id.toString(), quantity: 6 }],
         shippingAddress: 'Addr 1',
+        paymentMethod: 'vnpay',
       }),
       orderService.createOrder(user._id.toString(), {
         items: [{ productId: limited._id.toString(), quantity: 6 }],
         shippingAddress: 'Addr 2',
+        paymentMethod: 'vnpay',
       }),
       orderService.createOrder(user._id.toString(), {
         items: [{ productId: limited._id.toString(), quantity: 6 }],
         shippingAddress: 'Addr 3',
+        paymentMethod: 'vnpay',
       }),
     ]);
 

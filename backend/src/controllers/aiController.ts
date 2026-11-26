@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { aiService } from '../services/aiService';
+import { sendSafeError } from '../middleware/errorHandler';
 
 export const aiController = {
   async getStatus(_req: AuthenticatedRequest, res: Response) {
@@ -10,24 +11,13 @@ export const aiController = {
   async chat(req: AuthenticatedRequest, res: Response) {
     try {
       const { message, history, context } = req.body || {};
-      if (!message || typeof message !== 'string' || !message.trim()) {
-        return res.status(400).json({ message: 'Message is required.', code: 'BAD_REQUEST' });
-      }
-      if (message.trim().length > 1000) {
-        return res.status(400).json({
-          message: 'Message is too long (maximum 1000 characters).',
-          code: 'BAD_REQUEST'
-        });
-      }
-
       const result = await aiService.chat(message, req.user, { history, context });
       return res.status(200).json(result);
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'AI Assistant currently unavailable.',
-        code: error.code || 'AI_ERROR',
-        provider: error.provider,
-        model: error.model
+      return sendSafeError(res, error, 500, {
+        ...(error?.code ? { code: error.code } : {}),
+        ...(error?.provider ? { provider: error.provider } : {}),
+        ...(error?.model ? { model: error.model } : {}),
       });
     }
   },
@@ -40,10 +30,7 @@ export const aiController = {
       const result = await aiService.getHistory(String(req.user._id));
       return res.status(200).json(result);
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to load AI chat history.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -58,10 +45,7 @@ export const aiController = {
         ...result
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to clear AI chat history.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -71,11 +55,10 @@ export const aiController = {
       const insights = await aiService.getProductInsights(productId);
       return res.status(200).json(insights);
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to generate AI product insights.',
-        code: error.code || 'AI_ERROR',
-        provider: error.provider,
-        model: error.model
+      return sendSafeError(res, error, 500, {
+        ...(error?.code ? { code: error.code } : {}),
+        ...(error?.provider ? { provider: error.provider } : {}),
+        ...(error?.model ? { model: error.model } : {}),
       });
     }
   }

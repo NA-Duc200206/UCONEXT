@@ -122,6 +122,7 @@ describe('authService', () => {
     expect(capturedResetUrl).toBe('');
 
     await authService.forgotPassword('alice@uconext.test');
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(capturedResetUrl).toContain('/reset-password?token=');
     const rawToken = new URL(capturedResetUrl).searchParams.get('token')!;
     expect(rawToken).toBeTruthy();

@@ -1,5 +1,5 @@
-import { Types } from 'mongoose';
-import { Coupon, Order } from '../models';
+import { ClientSession, Types } from 'mongoose';
+import { Coupon, CouponRedemption, Order } from '../models';
 import { auditService } from './auditService';
 
 function createCouponError(message: string, statusCode = 400) {
@@ -67,7 +67,12 @@ export const couponService = {
     }).select('-__v');
   },
 
-  async validateCoupon(code: string, orderAmount: number, userId?: string) {
+  async validateCoupon(
+    code: string,
+    orderAmount: number,
+    userId?: string,
+    session?: ClientSession | null
+  ) {
     if (!code || typeof code !== 'string' || !code.trim()) {
       throw createCouponError('Please enter a coupon code.', 400);
     }
@@ -78,7 +83,9 @@ export const couponService = {
     }
 
     const cleanCode = code.trim().toUpperCase();
-    const coupon = await Coupon.findOne({ code: cleanCode, isDeleted: false });
+    const couponQuery = Coupon.findOne({ code: cleanCode, isDeleted: false });
+    if (session) couponQuery.session(session);
+    const coupon = await couponQuery;
 
     if (!coupon) {
       throw createCouponError('Coupon code does not exist or has been removed.', 404);
@@ -102,11 +109,25 @@ export const couponService = {
     }
 
     if (userId && coupon.perUserLimit > 0 && Types.ObjectId.isValid(userId)) {
-      const userUsageCount = await Order.countDocuments({
-        userId: new Types.ObjectId(userId) as any,
-        couponCode: cleanCode,
-        status: { $ne: 'cancelled' }
+      const userObjectId = new Types.ObjectId(userId) as any;
+      const redemptionCountQuery = CouponRedemption.countDocuments({
+        couponId: coupon._id,
+        userId: userObjectId,
       });
+      const orderCountQuery = Order.countDocuments({
+        userId: userObjectId,
+        couponCode: cleanCode,
+        status: { $ne: 'cancelled' },
+      });
+      if (session) {
+        redemptionCountQuery.session(session);
+        orderCountQuery.session(session);
+      }
+      const [redemptionCount, orderUsageCount] = await Promise.all([
+        redemptionCountQuery,
+        orderCountQuery,
+      ]);
+      const userUsageCount = Math.max(redemptionCount, orderUsageCount);
       if (userUsageCount >= coupon.perUserLimit) {
         throw createCouponError(
           `You have already reached the usage limit (${coupon.perUserLimit}) for this coupon.`,
@@ -149,7 +170,8 @@ export const couponService = {
         discountType: coupon.discountType,
         discountValue: coupon.discountValue,
         minOrderAmount: coupon.minOrderAmount,
-        maxDiscountAmount: coupon.maxDiscountAmount
+        maxDiscountAmount: coupon.maxDiscountAmount,
+        perUserLimit: coupon.perUserLimit,
       }
     };
   },

@@ -68,6 +68,10 @@ async function deliverMail(payload: MailPayload): Promise<boolean> {
   try {
     const transporter = getTransporter();
     if (!transporter) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error(`❌ SMTP is not configured in production; skipping ${payload.consoleTag} delivery.`);
+        return false;
+      }
       console.log(`\n==================================================`);
       console.log(`📧 [EMAIL SERVICE - DEV FALLBACK] ${payload.consoleTag}`);
       console.log(`To: ${payload.to}`);

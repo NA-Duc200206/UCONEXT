@@ -36,14 +36,14 @@ export const productService = {
       inStock,
       minRating,
       page = '1',
-      limit = '9',
+      limit = '24',
       sort,
     } = params || {};
 
     const parsedPage = parseInt(page.toString(), 10);
     const parsedLimit = parseInt(limit.toString(), 10);
     const pageNum = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
-    const limitNum = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 1200) : 9;
+    const limitNum = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 100) : 24;
     const parsedMinRating = minRating !== undefined ? parseFloat(String(minRating)) : 0;
     const requireInStock = inStock === true || inStock === 'true' || inStock === '1';
     const normalizedSort = String(sort || '').trim().toLowerCase();

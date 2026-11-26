@@ -32,8 +32,11 @@ export const configureSocketAuth = (io: SocketIOServer) => {
 
       const decoded: any = jwt.verify(rawAuthToken, getJwtSecret());
       if (decoded?.id) {
-        const user = await User.findById(decoded.id).select('_id role').lean();
-        if (user) {
+        const user = await User.findById(decoded.id).select('_id role tokenVersion').lean();
+        const userTokenVersion = typeof user?.tokenVersion === 'number' ? user.tokenVersion : 0;
+        const tokenVersionMatches =
+          typeof decoded.tv === 'number' && decoded.tv === userTokenVersion;
+        if (user && tokenVersionMatches) {
           socket.data.userId = String(user._id);
           socket.data.role = user.role;
         }
@@ -52,6 +55,12 @@ export const configureSocketAuth = (io: SocketIOServer) => {
       socket.join('role:admin');
     }
   });
+};
+
+export const disconnectUserSockets = (userId: string) => {
+  if (ioInstance && userId) {
+    ioInstance.in(`user:${userId}`).disconnectSockets(true);
+  }
 };
 
 export const emitEvent = (event: string, data: any) => {

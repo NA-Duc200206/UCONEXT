@@ -21,7 +21,7 @@ function makeJsonResponse(status, body) {
   };
 }
 
-describe('frontend API client & silent refresh mutex', () => {
+describe('frontend API client & in-memory token silent refresh mutex', () => {
   const originalFetch = globalThis.fetch;
   const originalConsoleError = console.error;
   let dispatchedEvents = [];
@@ -30,9 +30,9 @@ describe('frontend API client & silent refresh mutex', () => {
     dispatchedEvents = [];
     globalThis.localStorage = createMemoryStorage();
     globalThis.CustomEvent = class CustomEvent {
-      constructor(type, detail) {
+      constructor(type, init) {
         this.type = type;
-        this.detail = detail;
+        this.detail = init?.detail;
       }
     };
     globalThis.window = {
@@ -41,25 +41,48 @@ describe('frontend API client & silent refresh mutex', () => {
     console.error = () => {};
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const { clearAccessToken } = await import('../src/services/api.js');
+    clearAccessToken();
     globalThis.fetch = originalFetch;
     console.error = originalConsoleError;
     delete globalThis.localStorage;
     delete globalThis.window;
   });
 
-  it('coalesces concurrent 401 responses into a single token refresh and retries requests', async () => {
-    globalThis.localStorage.setItem('token', 'expired-access-token');
-    globalThis.localStorage.setItem('refreshToken', 'valid-refresh-token');
+  it('keeps access token strictly in memory (never localStorage) after login', async () => {
+    globalThis.fetch = async (url, options = {}) => {
+      if (url === '/api/auth/login') {
+        assert.equal(options.credentials, 'include');
+        return makeJsonResponse(200, {
+          token: 'in-memory-jwt',
+          user: { id: 'u1', email: 'test@uconext.vn' },
+        });
+      }
+      return makeJsonResponse(200, { ok: true });
+    };
+
+    const { api, getAccessToken } = await import('../src/services/api.js');
+    await api.auth.login('test@uconext.vn', 'StrongPass1');
+
+    assert.equal(getAccessToken(), 'in-memory-jwt');
+    assert.equal(globalThis.localStorage.getItem('token'), null);
+    assert.equal(globalThis.localStorage.getItem('refreshToken'), null);
+  });
+
+  it('coalesces concurrent 401 responses into a single cookie-backed refresh and retries requests', async () => {
+    const { api, setAccessToken, getAccessToken } = await import('../src/services/api.js');
+    setAccessToken('expired-access-token');
 
     let refreshCallCount = 0;
     globalThis.fetch = async (url, options = {}) => {
+      assert.equal(options.credentials, 'include');
       if (url === '/api/auth/refresh') {
         refreshCallCount += 1;
+        assert.equal(options.body, undefined);
         await new Promise((r) => setTimeout(r, 15));
         return makeJsonResponse(200, {
           token: 'fresh-access-token',
-          refreshToken: 'rotated-refresh-token',
         });
       }
 
@@ -73,8 +96,6 @@ describe('frontend API client & silent refresh mutex', () => {
       return makeJsonResponse(401, { message: 'Missing auth' });
     };
 
-    const { api } = await import('../src/services/api.js');
-
     const [r1, r2, r3] = await Promise.all([
       api.orders.getMyOrders(),
       api.wishlist.getAll(),
@@ -85,14 +106,15 @@ describe('frontend API client & silent refresh mutex', () => {
     assert.equal(r1.ok, true);
     assert.equal(r2.ok, true);
     assert.equal(r3.ok, true);
-    assert.equal(globalThis.localStorage.getItem('token'), 'fresh-access-token');
-    assert.equal(globalThis.localStorage.getItem('refreshToken'), 'rotated-refresh-token');
-    assert.equal(dispatchedEvents.length, 0);
+    assert.equal(getAccessToken(), 'fresh-access-token');
+    assert.equal(globalThis.localStorage.getItem('token'), null);
+    assert.equal(globalThis.localStorage.getItem('refreshToken'), null);
+    assert.equal(dispatchedEvents.includes('uconext:auth-expired'), false);
   });
 
-  it('clears storage and dispatches uconext:auth-expired when token refresh fails', async () => {
-    globalThis.localStorage.setItem('token', 'expired-access-token');
-    globalThis.localStorage.setItem('refreshToken', 'revoked-refresh-token');
+  it('clears in-memory token and dispatches uconext:auth-expired when token refresh fails', async () => {
+    const { api, setAccessToken, getAccessToken } = await import('../src/services/api.js');
+    setAccessToken('expired-access-token');
 
     globalThis.fetch = async (url) => {
       if (url === '/api/auth/refresh') {
@@ -101,9 +123,8 @@ describe('frontend API client & silent refresh mutex', () => {
       return makeJsonResponse(401, { message: 'Access token expired' });
     };
 
-    const { api } = await import('../src/services/api.js');
-
     await assert.rejects(() => api.orders.getMyOrders(), /Access token expired/);
+    assert.equal(getAccessToken(), null);
     assert.equal(globalThis.localStorage.getItem('token'), null);
     assert.equal(globalThis.localStorage.getItem('refreshToken'), null);
     assert.equal(dispatchedEvents.includes('uconext:auth-expired'), true);
