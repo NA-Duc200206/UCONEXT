@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -33,6 +34,7 @@ import reviewRoutes from './routes/reviewRoutes';
 import wishlistRoutes from './routes/wishlistRoutes';
 import aiRoutes from './routes/aiRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import { globalLimiter, parseTrustProxyHops } from './middleware/rateLimits';
 import path from 'path';
 
 const app = express();
@@ -40,8 +42,9 @@ const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = parseAllowedOrigins();
 
-if (isProduction) {
-  app.set('trust proxy', 1);
+const trustProxyHops = parseTrustProxyHops();
+if (trustProxyHops !== false) {
+  app.set('trust proxy', trustProxyHops);
 }
 
 const corsOriginValidator = (
@@ -66,12 +69,16 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan(isProduction ? 'combined' : 'dev'));
 
 // Static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+
+// Global API rate limit
+app.use('/api', globalLimiter);
 
 // Routing
 app.use('/api/auth', authRoutes);
