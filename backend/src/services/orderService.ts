@@ -5,6 +5,7 @@ import { emailService } from './emailService';
 import { couponService } from './couponService';
 import { cacheService } from '../utils/cache';
 import { auditService } from './auditService';
+import { getVnpayConfig } from '../config/env';
 
 function createOrderError(message: string, statusCode = 400) {
   const error: any = new Error(message);
@@ -36,6 +37,9 @@ export const orderService = {
     }
 
     const normalizedMethod = paymentMethod === 'vnpay' ? 'vnpay' : 'cod';
+    if (normalizedMethod === 'vnpay' && !getVnpayConfig()) {
+      throw createOrderError('VNPAY payment gateway is currently disabled.', 503);
+    }
 
     // Validate item shapes & aggregate total quantity per productId across variants
     const qtyByProductId = new Map<string, number>();

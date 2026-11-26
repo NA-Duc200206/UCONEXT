@@ -233,6 +233,7 @@ export const api = {
 
   // Payments
   payments: {
+    getMethods: () => request('/payment/methods'),
     createPaymentUrl: (orderId) => request(`/payment/create-payment-url/${orderId}`, { method: 'POST' }),
     verifyPayment: (queryParamsString) => request(`/payment/verify-payment?${queryParamsString}`),
   },

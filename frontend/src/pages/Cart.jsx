@@ -32,6 +32,7 @@ const Cart = () => {
   const [streetAddress, setStreetAddress] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'vnpay'
+  const [vnpayAvailable, setVnpayAvailable] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutFeedback, setCheckoutFeedback] = useState(null);
@@ -59,6 +60,24 @@ const Cart = () => {
       }
     };
     fetchActiveCoupons();
+    const fetchPaymentMethods = async () => {
+      try {
+        const res = await api.payments.getMethods();
+        if (mounted) {
+          const enabled = Boolean(res?.vnpay);
+          setVnpayAvailable(enabled);
+          if (!enabled) {
+            setPaymentMethod((prev) => (prev === 'vnpay' ? 'cod' : prev));
+          }
+        }
+      } catch {
+        if (mounted) {
+          setVnpayAvailable(false);
+          setPaymentMethod((prev) => (prev === 'vnpay' ? 'cod' : prev));
+        }
+      }
+    };
+    fetchPaymentMethods();
     return () => {
       mounted = false;
     };
@@ -874,34 +893,36 @@ const Cart = () => {
                       </span>
                     </label>
 
-                    {/* VNPAY */}
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        cursor: 'pointer',
-                        padding: '11px 12px',
-                        borderRadius: '10px',
-                        border: `1px solid ${paymentMethod === 'vnpay' ? 'var(--brand)' : 'var(--glass-border)'}`,
-                        background: paymentMethod === 'vnpay' ? 'rgba(36, 84, 244, 0.08)' : 'transparent',
-                        transition: 'var(--transition-fast)',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="payment"
-                        checked={paymentMethod === 'vnpay'}
-                        onChange={() => setPaymentMethod('vnpay')}
-                        style={{ accentColor: 'var(--brand)' }}
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CreditCard size={15} strokeWidth={1.75} color="var(--text-secondary)" />
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                          VNPAY Online Payment
-                        </span>
-                      </div>
-                    </label>
+                    {/* VNPAY (only shown when merchant gateway is enabled) */}
+                    {vnpayAvailable && (
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          cursor: 'pointer',
+                          padding: '11px 12px',
+                          borderRadius: '10px',
+                          border: `1px solid ${paymentMethod === 'vnpay' ? 'var(--brand)' : 'var(--glass-border)'}`,
+                          background: paymentMethod === 'vnpay' ? 'rgba(36, 84, 244, 0.08)' : 'transparent',
+                          transition: 'var(--transition-fast)',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="payment"
+                          checked={paymentMethod === 'vnpay'}
+                          onChange={() => setPaymentMethod('vnpay')}
+                          style={{ accentColor: 'var(--brand)' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CreditCard size={15} strokeWidth={1.75} color="var(--text-secondary)" />
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                            VNPAY Online Payment
+                          </span>
+                        </div>
+                      </label>
+                    )}
                   </div>
                 </div>
 

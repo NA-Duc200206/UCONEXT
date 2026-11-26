@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
+router.get('/methods', paymentController.getMethods);
 router.post('/create-payment-url/:id', authenticateToken, paymentController.createPaymentUrl);
 router.get('/verify-payment', paymentController.verifyPayment);
 router.get('/vnpay_ipn', paymentController.vnpayIpn);

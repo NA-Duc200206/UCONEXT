@@ -2,6 +2,10 @@ import { Request, Response } from 'express';
 import { paymentService } from '../services/paymentService';
 
 export const paymentController = {
+  getMethods(_req: Request, res: Response) {
+    return res.status(200).json(paymentService.getAvailableMethods());
+  },
+
   async createPaymentUrl(req: any, res: Response) {
     try {
       const { id } = req.params;
