@@ -654,8 +654,8 @@ const ProductDetail = () => {
                   {user ? (
                     <form onSubmit={handleSubmitReview} className="pd-review-form">
                       <div>
-                        <label className="pd-form-label">Your Rating</label>
-                        <div className="pd-star-picker">
+                        <span className="pd-form-label" id="pd-rating-label">Your Rating</span>
+                        <div className="pd-star-picker" role="group" aria-labelledby="pd-rating-label">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
                               type="button"
@@ -676,8 +676,9 @@ const ProductDetail = () => {
                       </div>
 
                       <div>
-                        <label className="pd-form-label">Your Feedback</label>
+                        <label htmlFor="pd-review-comment" className="pd-form-label">Your Feedback</label>
                         <textarea
+                          id="pd-review-comment"
                           rows={3}
                           value={reviewComment}
                           onChange={(e) => setReviewComment(e.target.value)}

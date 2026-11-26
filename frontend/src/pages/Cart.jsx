@@ -12,7 +12,6 @@ import {
   CreditCard,
   Truck,
   Tag,
-  Check,
   AlertCircle,
   CheckCircle2,
   X,
@@ -711,9 +710,9 @@ const Cart = () => {
               >
                 {/* Structured Shipping Details */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '700' }}>
+                  <div style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '700' }}>
                     Shipping Information
-                  </label>
+                  </div>
 
                   {savedAddresses.length > 0 && (
                     <div
@@ -866,9 +865,9 @@ const Cart = () => {
 
                 {/* Payment Options */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                  <div style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
                     Payment Method
-                  </label>
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {/* COD */}
                     <label

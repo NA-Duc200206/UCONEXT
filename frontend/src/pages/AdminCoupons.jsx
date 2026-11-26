@@ -413,10 +413,11 @@ const AdminCoupons = () => {
 
             <form onSubmit={handleSaveCoupon} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                <label htmlFor="coupon-code" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                   Coupon Code *
                 </label>
                 <input
+                  id="coupon-code"
                   type="text"
                   required
                   placeholder="WELCOME10"
@@ -437,10 +438,11 @@ const AdminCoupons = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                <label htmlFor="coupon-description" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                   Description / Note
                 </label>
                 <input
+                  id="coupon-description"
                   type="text"
                   placeholder="10% discount for seasonal campaign"
                   value={formData.description}
@@ -459,10 +461,11 @@ const AdminCoupons = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-discount-type" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Type
                   </label>
                   <select
+                    id="coupon-discount-type"
                     value={formData.discountType}
                     onChange={(e) => setFormData({ ...formData, discountType: e.target.value })}
                     style={{
@@ -480,10 +483,11 @@ const AdminCoupons = () => {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-discount-value" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Discount Value *
                   </label>
                   <input
+                    id="coupon-discount-value"
                     type="number"
                     min="1"
                     required
@@ -504,10 +508,11 @@ const AdminCoupons = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-min-order" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Min Order Amount (VND)
                   </label>
                   <input
+                    id="coupon-min-order"
                     type="number"
                     min="0"
                     value={formData.minOrderAmount}
@@ -524,10 +529,11 @@ const AdminCoupons = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-max-discount" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Max Discount (VND)
                   </label>
                   <input
+                    id="coupon-max-discount"
                     type="number"
                     min="0"
                     placeholder="Optional"
@@ -548,10 +554,11 @@ const AdminCoupons = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-usage-limit" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Usage Limit
                   </label>
                   <input
+                    id="coupon-usage-limit"
                     type="number"
                     min="1"
                     value={formData.usageLimit}
@@ -568,10 +575,11 @@ const AdminCoupons = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-per-user-limit" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Per-Customer Limit
                   </label>
                   <input
+                    id="coupon-per-user-limit"
                     type="number"
                     min="0"
                     value={formData.perUserLimit}
@@ -591,10 +599,11 @@ const AdminCoupons = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-start-date" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Start Date
                   </label>
                   <input
+                    id="coupon-start-date"
                     type="date"
                     required
                     value={formData.startDate}
@@ -611,10 +620,11 @@ const AdminCoupons = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <label htmlFor="coupon-end-date" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                     Expiry Date
                   </label>
                   <input
+                    id="coupon-end-date"
                     type="date"
                     required
                     value={formData.endDate}

@@ -7,7 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonLoader';
 import AdminNav from '../components/AdminNav';
 import { formatVND } from '../utils/formatters';
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { DollarSign, ShoppingCart, Users, Package, ArrowRight, Eye, LayoutDashboard, ShoppingBag, Ticket } from 'lucide-react';
+import { DollarSign, ShoppingCart, Users, Package, ArrowRight, Eye, LayoutDashboard } from 'lucide-react';
 
 const AdminDashboard = () => {
   const { user, isAdmin } = useAuth();
@@ -326,7 +326,7 @@ const AdminDashboard = () => {
               {data.recentOrders?.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
                   <td style={{ padding: '16px 8px', fontWeight: '700' }}>#{String(order.id || order._id).slice(-6)}</td>
-                  <td style={{ padding: '16px 8px' }}>
+                  <td style={{ padding: '16px 8px' }} aria-label={order.user?.name || order.user?.email || 'Customer'}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span>{order.user?.name}</span>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{order.user?.email}</span>
@@ -349,7 +349,7 @@ const AdminDashboard = () => {
                     </span>
                   </td>
                   <td style={{ padding: '16px 8px', textAlign: 'right' }}>
-                    <Link to="/admin/orders" className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }} title="View Details">
+                    <Link to="/admin/orders" className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '6px' }} title="View Details" aria-label={`View order ${String(order.id || order._id).slice(-6)}`}>
                       <Eye size={14} />
                     </Link>
                   </td>
