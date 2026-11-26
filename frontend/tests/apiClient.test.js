@@ -1,15 +1,5 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
-
-function createMemoryStorage() {
-  const map = new Map();
-  return {
-    getItem: (k) => (map.has(k) ? map.get(k) : null),
-    setItem: (k, v) => map.set(k, String(v)),
-    removeItem: (k) => map.delete(k),
-    clear: () => map.clear(),
-  };
-}
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { api, getAccessToken, setAccessToken, clearAccessToken } from '../src/services/api.js';
 
 function makeJsonResponse(status, body) {
   return {
@@ -23,37 +13,30 @@ function makeJsonResponse(status, body) {
 
 describe('frontend API client & in-memory token silent refresh mutex', () => {
   const originalFetch = globalThis.fetch;
-  const originalConsoleError = console.error;
   let dispatchedEvents = [];
+  let expiredHandler;
 
   beforeEach(() => {
     dispatchedEvents = [];
-    globalThis.localStorage = createMemoryStorage();
-    globalThis.CustomEvent = class CustomEvent {
-      constructor(type, init) {
-        this.type = type;
-        this.detail = init?.detail;
-      }
-    };
-    globalThis.window = {
-      dispatchEvent: (evt) => dispatchedEvents.push(evt.type),
-    };
-    console.error = () => {};
+    localStorage.clear();
+    clearAccessToken();
+    expiredHandler = () => dispatchedEvents.push('uconext:auth-expired');
+    window.addEventListener('uconext:auth-expired', expiredHandler);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(async () => {
-    const { clearAccessToken } = await import('../src/services/api.js');
+  afterEach(() => {
+    window.removeEventListener('uconext:auth-expired', expiredHandler);
     clearAccessToken();
     globalThis.fetch = originalFetch;
-    console.error = originalConsoleError;
-    delete globalThis.localStorage;
-    delete globalThis.window;
+    localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it('keeps access token strictly in memory (never localStorage) after login', async () => {
     globalThis.fetch = async (url, options = {}) => {
       if (url === '/api/auth/login') {
-        assert.equal(options.credentials, 'include');
+        expect(options.credentials).toBe('include');
         return makeJsonResponse(200, {
           token: 'in-memory-jwt',
           user: { id: 'u1', email: 'test@uconext.vn' },
@@ -62,24 +45,22 @@ describe('frontend API client & in-memory token silent refresh mutex', () => {
       return makeJsonResponse(200, { ok: true });
     };
 
-    const { api, getAccessToken } = await import('../src/services/api.js');
     await api.auth.login('test@uconext.vn', 'StrongPass1');
 
-    assert.equal(getAccessToken(), 'in-memory-jwt');
-    assert.equal(globalThis.localStorage.getItem('token'), null);
-    assert.equal(globalThis.localStorage.getItem('refreshToken'), null);
+    expect(getAccessToken()).toBe('in-memory-jwt');
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
   });
 
   it('coalesces concurrent 401 responses into a single cookie-backed refresh and retries requests', async () => {
-    const { api, setAccessToken, getAccessToken } = await import('../src/services/api.js');
     setAccessToken('expired-access-token');
 
     let refreshCallCount = 0;
     globalThis.fetch = async (url, options = {}) => {
-      assert.equal(options.credentials, 'include');
+      expect(options.credentials).toBe('include');
       if (url === '/api/auth/refresh') {
         refreshCallCount += 1;
-        assert.equal(options.body, undefined);
+        expect(options.body).toBeUndefined();
         await new Promise((r) => setTimeout(r, 15));
         return makeJsonResponse(200, {
           token: 'fresh-access-token',
@@ -102,18 +83,17 @@ describe('frontend API client & in-memory token silent refresh mutex', () => {
       api.auth.getProfile(),
     ]);
 
-    assert.equal(refreshCallCount, 1);
-    assert.equal(r1.ok, true);
-    assert.equal(r2.ok, true);
-    assert.equal(r3.ok, true);
-    assert.equal(getAccessToken(), 'fresh-access-token');
-    assert.equal(globalThis.localStorage.getItem('token'), null);
-    assert.equal(globalThis.localStorage.getItem('refreshToken'), null);
-    assert.equal(dispatchedEvents.includes('uconext:auth-expired'), false);
+    expect(refreshCallCount).toBe(1);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(r3.ok).toBe(true);
+    expect(getAccessToken()).toBe('fresh-access-token');
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
+    expect(dispatchedEvents).not.toContain('uconext:auth-expired');
   });
 
   it('clears in-memory token and dispatches uconext:auth-expired when token refresh fails', async () => {
-    const { api, setAccessToken, getAccessToken } = await import('../src/services/api.js');
     setAccessToken('expired-access-token');
 
     globalThis.fetch = async (url) => {
@@ -123,11 +103,11 @@ describe('frontend API client & in-memory token silent refresh mutex', () => {
       return makeJsonResponse(401, { message: 'Access token expired' });
     };
 
-    await assert.rejects(() => api.orders.getMyOrders(), /Access token expired/);
-    assert.equal(getAccessToken(), null);
-    assert.equal(globalThis.localStorage.getItem('token'), null);
-    assert.equal(globalThis.localStorage.getItem('refreshToken'), null);
-    assert.equal(dispatchedEvents.includes('uconext:auth-expired'), true);
+    await expect(api.orders.getMyOrders()).rejects.toThrow(/Access token expired/);
+    expect(getAccessToken()).toBeNull();
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
+    expect(dispatchedEvents).toContain('uconext:auth-expired');
   });
 
   it('handles non-JSON 502 gateway HTML error pages gracefully without SyntaxError', async () => {
@@ -141,11 +121,9 @@ describe('frontend API client & in-memory token silent refresh mutex', () => {
       },
     });
 
-    const { api } = await import('../src/services/api.js');
-
-    await assert.rejects(
-      () => api.categories.getAll(),
-      (err) => err.status === 502 && /Server unavailable \(HTTP 502\)/.test(err.message)
-    );
+    await expect(api.categories.getAll()).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/Server unavailable \(HTTP 502\)/),
+    });
   });
 });
