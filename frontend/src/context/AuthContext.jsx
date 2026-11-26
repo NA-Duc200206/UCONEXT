@@ -1,69 +1,82 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { api } from '../services/api';
+import { api, setAccessToken, clearAccessToken } from '../services/api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = async (currentToken) => {
-    try {
-      if (currentToken) {
-        const response = await api.auth.getProfile();
-        setUser(response.user);
-        const latestToken = localStorage.getItem('token');
-        if (latestToken && latestToken !== currentToken) {
-          setToken(latestToken);
-        }
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Failed to load user profile:', error.message);
-      // If token expired or invalid, clear it
-      logout();
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    // Migration cleanup: remove any legacy tokens stored in localStorage
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
     }
-  };
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await api.auth.refresh();
+        if (!cancelled && response?.token) {
+          setAccessToken(response.token);
+          setToken(response.token);
+          setUser(response.user || null);
+        }
+      } catch {
+        if (!cancelled) {
+          clearAccessToken();
+          setToken(null);
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const handleAuthExpired = () => {
+      clearAccessToken();
       setToken(null);
       setUser(null);
       setLoading(false);
     };
+    const handleTokenRefreshed = (evt) => {
+      const nextToken = evt?.detail?.token;
+      const nextUser = evt?.detail?.user;
+      if (nextToken) {
+        setToken(nextToken);
+      }
+      if (nextUser) {
+        setUser(nextUser);
+      }
+    };
     window.addEventListener('uconext:auth-expired', handleAuthExpired);
-    return () => window.removeEventListener('uconext:auth-expired', handleAuthExpired);
+    window.addEventListener('uconext:token-refreshed', handleTokenRefreshed);
+    return () => {
+      window.removeEventListener('uconext:auth-expired', handleAuthExpired);
+      window.removeEventListener('uconext:token-refreshed', handleTokenRefreshed);
+    };
   }, []);
-
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem('token', token);
-      loadProfile(token);
-    } else {
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      setUser(null);
-      setLoading(false);
-    }
-  }, [token]);
 
   const login = async (email, password) => {
     setLoading(true);
     try {
       const response = await api.auth.login(email, password);
-      if (response.refreshToken) {
-        localStorage.setItem('refreshToken', response.refreshToken);
-      }
+      setAccessToken(response.token);
       setToken(response.token);
       setUser(response.user);
       return response.user;
-    } catch (error) {
+    } finally {
       setLoading(false);
-      throw error;
     }
   };
 
@@ -71,15 +84,12 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.auth.register(name, email, password);
-      if (response.refreshToken) {
-        localStorage.setItem('refreshToken', response.refreshToken);
-      }
+      setAccessToken(response.token);
       setToken(response.token);
       setUser(response.user);
       return response.user;
-    } catch (error) {
+    } finally {
       setLoading(false);
-      throw error;
     }
   };
 
@@ -87,27 +97,32 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.auth.loginWithFirebase(idToken);
-      if (response.refreshToken) {
-        localStorage.setItem('refreshToken', response.refreshToken);
-      }
+      setAccessToken(response.token);
       setToken(response.token);
       setUser(response.user);
       return response.user;
-    } catch (error) {
+    } finally {
       setLoading(false);
-      throw error;
     }
   };
 
   const logout = () => {
-    const currentRefreshToken = localStorage.getItem('refreshToken');
-    if (currentRefreshToken) {
-      api.auth.logout(currentRefreshToken).catch(() => {});
-    }
+    api.auth.logout().catch(() => {});
+    clearAccessToken();
     setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
+  };
+
+  const logoutAll = async () => {
+    try {
+      await api.auth.logoutAll();
+    } catch {
+      // ignore
+    } finally {
+      clearAccessToken();
+      setToken(null);
+      setUser(null);
+    }
   };
 
   const updateUser = (updatedUser) => {
@@ -115,7 +130,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, loginWithFirebase, logout, updateUser, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, loginWithFirebase, logout, logoutAll, updateUser, isAdmin: user?.role === 'admin' }}>
       {children}
     </AuthContext.Provider>
   );

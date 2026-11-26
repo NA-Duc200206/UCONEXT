@@ -277,6 +277,7 @@ const AdminOrders = () => {
           <option value="pending">Unpaid</option>
           <option value="paid">Paid</option>
           <option value="failed">Failed</option>
+          <option value="review">Needs Reconciliation (Review)</option>
         </select>
       </div>
 
@@ -325,6 +326,11 @@ const AdminOrders = () => {
                             }}
                           >
                             <Tag size={11} /> {order.couponCode}
+                          </span>
+                        )}
+                        {order.paymentStatus === 'review' && (
+                          <span className="badge badge-error" style={{ fontSize: '11px', fontWeight: 700 }}>
+                            Payment Reconciliation Required
                           </span>
                         )}
                       </div>
@@ -414,6 +420,7 @@ const AdminOrders = () => {
                               <option value="pending">Unpaid</option>
                               <option value="paid">Paid</option>
                               <option value="failed">Failed</option>
+                              <option value="review">Needs Review</option>
                             </select>
                           </div>
                           {order.discountAmount > 0 && (

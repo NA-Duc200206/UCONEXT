@@ -3,6 +3,7 @@ import { Review } from '../models/Review';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
 import { cacheService } from '../utils/cache';
+import { invalidateProductInsightsCache } from './aiService';
 
 const MAX_REVIEW_COMMENT_LENGTH = 2000;
 
@@ -95,6 +96,7 @@ export const reviewService = {
       existing.isDeleted = false;
       await existing.save();
       await cacheService.invalidateByPrefix('cache:products:');
+      await invalidateProductInsightsCache(productId);
       return existing;
     }
 
@@ -106,6 +108,7 @@ export const reviewService = {
     } as any);
 
     await cacheService.invalidateByPrefix('cache:products:');
+    await invalidateProductInsightsCache(productId);
     return review;
   },
 
@@ -126,6 +129,7 @@ export const reviewService = {
     review.isDeleted = true;
     await review.save();
     await cacheService.invalidateByPrefix('cache:products:');
+    await invalidateProductInsightsCache(String(review.productId));
     return true;
   },
 };

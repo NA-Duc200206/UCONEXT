@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { categoryService } from '../services/categoryService';
+import { sendSafeError } from '../middleware/errorHandler';
 
 export const categoryController = {
   async getAll(_req: Request, res: Response) {
@@ -7,10 +8,7 @@ export const categoryController = {
       const categories = await categoryService.getAll();
       return res.status(200).json({ categories });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve categories.',
-        error: error.message,
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -25,10 +23,7 @@ export const categoryController = {
       );
       return res.status(201).json({ message: 'Category created successfully.', category });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to create category.',
-        error: error.message,
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -45,10 +40,7 @@ export const categoryController = {
       );
       return res.status(200).json({ message: 'Category updated successfully.', category });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to update category.',
-        error: error.message,
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -58,10 +50,7 @@ export const categoryController = {
       await categoryService.delete(id, req.user?._id?.toString(), req.ip);
       return res.status(200).json({ message: 'Category deleted successfully.' });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to delete category.',
-        error: error.message,
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 };

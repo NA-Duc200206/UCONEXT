@@ -9,9 +9,12 @@ import { emailService } from './emailService';
 import { cacheService } from '../utils/cache';
 import { auditService } from './auditService';
 import { getJwtSecret, getJwtRefreshSecret } from '../config/env';
+import { disconnectUserSockets } from '../config/socket';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const PHONE_REGEX = /^[0-9+\-\s()]{8,20}$/;
+const INVALID_CREDENTIALS_MESSAGE = 'Email hoặc mật khẩu không đúng.';
+const DUMMY_PASSWORD_HASH = '$2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW';
 
 function createHttpError(message: string, statusCode: number) {
   const error: any = new Error(message);
@@ -58,16 +61,18 @@ function hashToken(rawToken: string): string {
 }
 
 function signAccessToken(user: any): string {
+  const tv = typeof user.tokenVersion === 'number' ? user.tokenVersion : 0;
   return jwt.sign(
-    { id: user._id, email: user.email, role: user.role },
+    { id: user._id, role: user.role, tv },
     getJwtSecret(),
-    { expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN || '1h') as jwt.SignOptions['expiresIn'] }
+    { expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN || '15m') as jwt.SignOptions['expiresIn'] }
   );
 }
 
 function signRefreshToken(user: any): string {
+  const tv = typeof user.tokenVersion === 'number' ? user.tokenVersion : 0;
   return jwt.sign(
-    { id: user._id, type: 'refresh', jti: crypto.randomBytes(12).toString('hex') },
+    { id: user._id, type: 'refresh', tv, jti: crypto.randomBytes(12).toString('hex') },
     getJwtRefreshSecret(),
     { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'] }
   );
@@ -162,23 +167,11 @@ export const authService = {
     }
 
     const user = await User.findOne({ email: normalizedEmail }).select('+password +refreshTokens');
-    if (!user) {
-      const error: any = new Error('Incorrect email or password.');
-      error.statusCode = 400;
-      throw error;
-    }
+    const passwordHash = user?.password || DUMMY_PASSWORD_HASH;
+    const isMatch = await bcrypt.compare(password, passwordHash);
 
-    if (!user.password) {
-      const error: any = new Error('This account uses Google Sign-In. Please continue with Google or reset your password.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password || '');
-    if (!isMatch) {
-      const error: any = new Error('Incorrect email or password.');
-      error.statusCode = 400;
-      throw error;
+    if (!user || !user.password || !isMatch) {
+      throw createHttpError(INVALID_CREDENTIALS_MESSAGE, 400);
     }
 
     const { token, refreshToken } = await issueAuthTokens(user);
@@ -288,11 +281,18 @@ export const authService = {
       throw error;
     }
     const previousRole = existingUser.role;
-    const user = await User.findByIdAndUpdate(userId, { role }, { returnDocument: 'after' }).select('-password');
+    const roleChanged = previousRole !== role;
+    const updatePayload: any = roleChanged
+      ? { $set: { role }, $inc: { tokenVersion: 1 } }
+      : { $set: { role } };
+    const user = await User.findByIdAndUpdate(userId, updatePayload, { returnDocument: 'after' }).select('-password');
     if (!user) {
       const error: any = new Error('User not found.');
       error.statusCode = 404;
       throw error;
+    }
+    if (roleChanged) {
+      disconnectUserSockets(String(user._id));
     }
     await cacheService.invalidateByPrefix('cache:analytics:');
     await auditService.record({
@@ -370,7 +370,9 @@ export const authService = {
     const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     userWithPassword.password = await bcrypt.hash(newPassword, salt);
     userWithPassword.refreshTokens = [];
+    userWithPassword.tokenVersion = (userWithPassword.tokenVersion ?? 0) + 1;
     await userWithPassword.save();
+    disconnectUserSockets(String(userWithPassword._id));
 
     try {
       await AuditLog.create({
@@ -590,7 +592,34 @@ export const authService = {
     const user = await User.findById(decoded.id).select('+refreshTokens');
     const hashedIncoming = hashToken(rawRefreshToken);
 
-    if (!user || !Array.isArray(user.refreshTokens) || !user.refreshTokens.includes(hashedIncoming)) {
+    if (!user) {
+      const error: any = new Error('Refresh token has been revoked.');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    const currentTv = typeof user.tokenVersion === 'number' ? user.tokenVersion : 0;
+    const isPresent = Array.isArray(user.refreshTokens) && user.refreshTokens.includes(hashedIncoming);
+
+    if (!isPresent || (typeof decoded.tv === 'number' && decoded.tv !== currentTv)) {
+      // Refresh token reuse or post-revocation replay detected: revoke every active session
+      user.refreshTokens = [];
+      user.tokenVersion = currentTv + 1;
+      await user.save();
+      disconnectUserSockets(String(user._id));
+
+      try {
+        await AuditLog.create({
+          userId: user._id as any,
+          action: 'REFRESH_TOKEN_REUSE_DETECTED',
+          targetType: 'User',
+          targetId: user._id.toString(),
+          ipAddress: ''
+        });
+      } catch (logErr) {
+        console.error('Failed to create refresh reuse audit log:', logErr);
+      }
+
       const error: any = new Error('Refresh token has been revoked.');
       error.statusCode = 401;
       throw error;
@@ -598,6 +627,28 @@ export const authService = {
 
     const { token, refreshToken } = await issueAuthTokens(user, hashedIncoming);
     return { token, refreshToken, user: sanitizeUser(user) };
+  },
+
+  async logoutAll(userId: string, ipAddress = '') {
+    await User.findByIdAndUpdate(userId, {
+      $set: { refreshTokens: [] },
+      $inc: { tokenVersion: 1 },
+    });
+    disconnectUserSockets(String(userId));
+
+    try {
+      await AuditLog.create({
+        userId: userId as any,
+        action: 'LOGOUT_ALL',
+        targetType: 'User',
+        targetId: String(userId),
+        ipAddress: ipAddress || ''
+      });
+    } catch (logErr) {
+      console.error('Failed to create logout-all audit log:', logErr);
+    }
+
+    return true;
   },
 
   async logout(rawRefreshToken?: string) {
@@ -641,11 +692,17 @@ export const authService = {
     const baseClientUrl = (process.env.CLIENT_URL || clientOrigin || 'http://localhost:3000').replace(/\/+$/, '');
     const resetUrl = `${baseClientUrl}/reset-password?token=${rawToken}`;
 
-    await emailService.sendPasswordResetEmail({
+    // Dispatch password reset email asynchronously to prevent timing-based email enumeration
+    const emailPayload = {
       to: user.email,
       name: user.name,
       resetUrl,
       expiresInMinutes: RESET_TOKEN_TTL_MINUTES
+    };
+    setImmediate(() => {
+      emailService.sendPasswordResetEmail(emailPayload).catch((err) => {
+        console.error('Failed to send password reset email:', err?.message || err);
+      });
     });
 
     return true;
@@ -678,7 +735,9 @@ export const authService = {
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     user.refreshTokens = [];
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await user.save();
+    disconnectUserSockets(String(user._id));
 
     try {
       await AuditLog.create({
@@ -693,106 +752,6 @@ export const authService = {
     }
 
     return true;
-  },
-
-  async loginWithGoogle(payload: { accessToken?: string; idToken?: string }, ipAddress = '') {
-    const accessToken = payload?.accessToken?.trim();
-    const idToken = payload?.idToken?.trim();
-
-    if (!accessToken && !idToken) {
-      const error: any = new Error('Google authentication token is required.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    let googleProfile: {
-      sub: string;
-      email: string;
-      email_verified?: boolean | string;
-      name?: string;
-      picture?: string;
-      aud?: string;
-    };
-
-    if (idToken) {
-      const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-      if (!verifyRes.ok) {
-        const error: any = new Error('Invalid or expired Google ID token.');
-        error.statusCode = 401;
-        throw error;
-      }
-      googleProfile = (await verifyRes.json()) as any;
-      if (process.env.GOOGLE_CLIENT_ID && googleProfile.aud !== process.env.GOOGLE_CLIENT_ID) {
-        const error: any = new Error('Google token audience mismatch.');
-        error.statusCode = 401;
-        throw error;
-      }
-    } else {
-      const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (!userInfoRes.ok) {
-        const error: any = new Error('Invalid or expired Google access token.');
-        error.statusCode = 401;
-        throw error;
-      }
-      googleProfile = (await userInfoRes.json()) as any;
-    }
-
-    const isVerified = googleProfile.email_verified === true || googleProfile.email_verified === 'true';
-    const normalizedEmail = googleProfile.email?.trim().toLowerCase();
-    if (!normalizedEmail || !isVerified) {
-      const error: any = new Error('Google account email is not verified.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    let user = await User.findOne({
-      $or: [{ googleId: googleProfile.sub }, { email: normalizedEmail }]
-    }).select('+refreshTokens');
-
-    let auditAction = 'GOOGLE_LOGIN';
-    if (!user) {
-      auditAction = 'GOOGLE_REGISTER';
-      user = await User.create({
-        name: googleProfile.name?.trim() || normalizedEmail.split('@')[0],
-        email: normalizedEmail,
-        googleId: googleProfile.sub,
-        authProvider: 'google',
-        avatar: googleProfile.picture || undefined,
-        role: 'customer'
-      });
-    } else {
-      let changed = false;
-      if (!user.googleId && googleProfile.sub) {
-        user.googleId = googleProfile.sub;
-        changed = true;
-      }
-      if (!user.avatar && googleProfile.picture) {
-        user.avatar = googleProfile.picture;
-        changed = true;
-      }
-      if (changed) {
-        await user.save();
-      }
-    }
-
-    const { token, refreshToken } = await issueAuthTokens(user);
-    const formattedUser = sanitizeUser(user);
-
-    try {
-      await AuditLog.create({
-        userId: user._id as any,
-        action: auditAction,
-        targetType: 'User',
-        targetId: user._id.toString(),
-        ipAddress: ipAddress || ''
-      });
-    } catch (logErr) {
-      console.error('Failed to create Google auth audit log:', logErr);
-    }
-
-    return { token, refreshToken, user: formattedUser };
   },
 
   async loginWithFirebase(idToken: string, ipAddress = '') {

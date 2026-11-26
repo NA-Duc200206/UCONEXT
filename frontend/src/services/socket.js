@@ -1,10 +1,11 @@
 import { io } from 'socket.io-client';
+import { getAccessToken } from './api';
 
 let socket = null;
 let lastAuthToken = null;
 
 export const getSocket = () => {
-  const currentToken = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+  const currentToken = getAccessToken() || '';
 
   if (socket && lastAuthToken !== currentToken) {
     socket.disconnect();
@@ -19,7 +20,7 @@ export const getSocket = () => {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       auth: (cb) => {
-        const latestToken = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        const latestToken = getAccessToken() || '';
         cb({ token: latestToken });
       },
     });
