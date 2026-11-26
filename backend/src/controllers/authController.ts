@@ -1,44 +1,83 @@
-import { Request, Response } from 'express';
+import { Request, Response, CookieOptions } from 'express';
 import { authService } from '../services/authService';
+import { sendSafeError } from '../middleware/errorHandler';
+
+const REFRESH_COOKIE_NAME = 'uc_rt';
+
+function parseDurationMs(raw: string, fallbackMs: number): number {
+  const match = /^(\d+)\s*([smhd])$/i.exec(raw.trim());
+  if (!match) return fallbackMs;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const multipliers: Record<string, number> = {
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+  };
+  return amount * (multipliers[unit] || 1000);
+}
+
+function getRefreshCookieOptions(): CookieOptions {
+  const isProd = process.env.NODE_ENV === 'production';
+  const maxAge = parseDurationMs(
+    process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    7 * 24 * 60 * 60 * 1000
+  );
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'strict',
+    path: '/api/auth',
+    maxAge,
+  };
+}
+
+function setRefreshCookie(res: Response, refreshToken: string) {
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
+}
+
+function clearRefreshCookie(res: Response) {
+  const { maxAge: _maxAge, ...clearOpts } = getRefreshCookieOptions();
+  res.clearCookie(REFRESH_COOKIE_NAME, clearOpts);
+}
+
+function getClientIp(req: Request): string {
+  return req.ip || req.socket?.remoteAddress || '';
+}
 
 export const authController = {
   async login(req: Request, res: Response) {
     try {
       const { email, password } = req.body;
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket?.remoteAddress || '';
+      const ipAddress = getClientIp(req);
       const result = await authService.login(email, password, ipAddress);
 
+      setRefreshCookie(res, result.refreshToken);
       return res.status(200).json({
         message: 'Login successful.',
         token: result.token,
-        refreshToken: result.refreshToken,
         user: result.user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Login failed.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
   async register(req: Request, res: Response) {
     try {
       const { name, email, password } = req.body;
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket?.remoteAddress || '';
+      const ipAddress = getClientIp(req);
       const result = await authService.register(name, email, password, ipAddress);
 
+      setRefreshCookie(res, result.refreshToken);
       return res.status(201).json({
         message: 'Registration successful.',
         token: result.token,
-        refreshToken: result.refreshToken,
         user: result.user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Registration failed.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -47,10 +86,7 @@ export const authController = {
       const formattedUser = await authService.getProfile(req.user);
       return res.status(200).json({ user: formattedUser });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve profile.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -60,10 +96,7 @@ export const authController = {
       await authService.syncCart(req.user, cart);
       return res.status(200).json({ message: 'Cart synchronized successfully.' });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to sync cart.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -72,93 +105,72 @@ export const authController = {
       const updated = await authService.updateProfile(req.user, req.body);
       return res.status(200).json({ message: 'Profile updated successfully.', user: updated });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to update profile.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
   async changePassword(req: any, res: Response) {
     try {
       await authService.changePassword(req.user, req.body);
+      clearRefreshCookie(res);
       return res.status(200).json({ message: 'Password updated successfully.' });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to change password.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
   async loginWithFirebase(req: Request, res: Response) {
     try {
       const { idToken } = req.body || {};
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket?.remoteAddress || '';
+      const ipAddress = getClientIp(req);
       const result = await authService.loginWithFirebase(idToken, ipAddress);
 
+      setRefreshCookie(res, result.refreshToken);
       return res.status(200).json({
         message: 'Sign-in successful.',
         token: result.token,
-        refreshToken: result.refreshToken,
         user: result.user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Firebase sign-in failed.',
-        error: error.message
-      });
-    }
-  },
-
-  async loginWithGoogle(req: Request, res: Response) {
-    try {
-      const { accessToken, idToken } = req.body || {};
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket?.remoteAddress || '';
-      const result = await authService.loginWithGoogle({ accessToken, idToken }, ipAddress);
-
-      return res.status(200).json({
-        message: 'Google sign-in successful.',
-        token: result.token,
-        refreshToken: result.refreshToken,
-        user: result.user
-      });
-    } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Google sign-in failed.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
   async refresh(req: Request, res: Response) {
     try {
-      const { refreshToken } = req.body;
+      const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
       const result = await authService.refreshSession(refreshToken);
+      setRefreshCookie(res, result.refreshToken);
       return res.status(200).json({
         message: 'Session refreshed.',
         token: result.token,
-        refreshToken: result.refreshToken,
         user: result.user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 401).json({
-        message: error.message || 'Failed to refresh session.',
-        error: error.message
-      });
+      clearRefreshCookie(res);
+      return sendSafeError(res, error, 401);
     }
   },
 
   async logout(req: Request, res: Response) {
     try {
-      const { refreshToken } = req.body || {};
+      const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
       await authService.logout(refreshToken);
+      clearRefreshCookie(res);
       return res.status(200).json({ message: 'Logged out successfully.' });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Logout failed.',
-        error: error.message
-      });
+      clearRefreshCookie(res);
+      return sendSafeError(res, error, 500);
+    }
+  },
+
+  async logoutAll(req: any, res: Response) {
+    try {
+      await authService.logoutAll(req.user._id.toString(), getClientIp(req));
+      clearRefreshCookie(res);
+      return res.status(200).json({ message: 'Logged out from all sessions.' });
+    } catch (error: any) {
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -171,36 +183,28 @@ export const authController = {
         message: 'If an account exists for that email, password reset instructions have been sent.'
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to process forgot password request.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
   async resetPassword(req: Request, res: Response) {
     try {
       const { token, newPassword } = req.body;
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket?.remoteAddress || '';
+      const ipAddress = getClientIp(req);
       await authService.resetPassword(token, newPassword, ipAddress);
+      clearRefreshCookie(res);
       return res.status(200).json({ message: 'Your password has been reset. Please sign in.' });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to reset password.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
-  async getAllUsers(req: Request, res: Response) {
+  async getAllUsers(_req: Request, res: Response) {
     try {
       const users = await authService.getAllUsers();
       return res.status(200).json({ users });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve users.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -208,13 +212,10 @@ export const authController = {
     try {
       const id = req.params.id as string;
       const { role } = req.body;
-      const user = await authService.updateUserRole(id, role, req.user?._id?.toString(), req.ip);
+      const user = await authService.updateUserRole(id, role, req.user?._id?.toString(), getClientIp(req));
       return res.status(200).json({ message: 'User role updated successfully.', user });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to update user role.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -227,10 +228,7 @@ export const authController = {
         user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to update preferences.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -239,10 +237,7 @@ export const authController = {
       const addresses = await authService.getAddresses(req.user);
       return res.status(200).json({ addresses });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve saved addresses.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -255,10 +250,7 @@ export const authController = {
         user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to add address.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -272,10 +264,7 @@ export const authController = {
         user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to update address.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -289,10 +278,7 @@ export const authController = {
         user
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to delete address.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -301,10 +287,7 @@ export const authController = {
       const products = await authService.getRecentlyViewed(req.user._id.toString());
       return res.status(200).json({ products });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve recently viewed products.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -317,10 +300,7 @@ export const authController = {
         products
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to record recently viewed product.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -332,10 +312,7 @@ export const authController = {
         products
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to clear recently viewed history.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   }
 };

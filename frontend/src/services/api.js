@@ -2,17 +2,38 @@ const BASE_URL = '/api';
 const AUTH_SKIP_REFRESH_ENDPOINTS = new Set([
   '/auth/login',
   '/auth/register',
+  '/auth/firebase',
   '/auth/refresh',
   '/auth/logout',
   '/auth/forgot-password',
   '/auth/reset-password',
 ]);
 
+let accessToken = null;
 let refreshPromise = null;
 
+export function getAccessToken() {
+  return accessToken;
+}
+
+export function setAccessToken(token) {
+  accessToken = token || null;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+  }
+}
+
+export function clearAccessToken() {
+  accessToken = null;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+  }
+}
+
 function clearAuthStorage() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
+  clearAccessToken();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('uconext:auth-expired'));
   }
@@ -22,17 +43,11 @@ async function refreshAccessToken() {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) {
-      clearAuthStorage();
-      return null;
-    }
-
     try {
       const response = await fetch(`${BASE_URL}/auth/refresh`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
       });
       const data = await parseJsonResponse(response);
       if (!response.ok || !data?.token) {
@@ -40,9 +55,11 @@ async function refreshAccessToken() {
         return null;
       }
 
-      localStorage.setItem('token', data.token);
-      if (data.refreshToken) {
-        localStorage.setItem('refreshToken', data.refreshToken);
+      setAccessToken(data.token);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('uconext:token-refreshed', { detail: { token: data.token, user: data.user } })
+        );
       }
       return data.token;
     } catch {
@@ -85,8 +102,8 @@ async function request(endpoint, { method = 'GET', body = null, token = null, _r
     'Content-Type': 'application/json',
   };
 
-  // Automatically fetch token from localStorage if not explicitly passed
-  const authToken = token || localStorage.getItem('token');
+  // Use in-memory access token if not explicitly passed
+  const authToken = token || accessToken;
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
@@ -94,6 +111,7 @@ async function request(endpoint, { method = 'GET', body = null, token = null, _r
   const config = {
     method,
     headers,
+    credentials: 'include',
   };
 
   if (body) {
@@ -131,9 +149,10 @@ async function request(endpoint, { method = 'GET', body = null, token = null, _r
 async function uploadImageFile(endpoint, file, _retry = false) {
   const formData = new FormData();
   formData.append('image', file);
-  const token = localStorage.getItem('token');
+  const token = accessToken;
   const res = await fetch(endpoint, {
     method: 'POST',
+    credentials: 'include',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData
   });
@@ -153,12 +172,40 @@ async function uploadImageFile(endpoint, file, _retry = false) {
 export const api = {
   // Authentication
   auth: {
-    login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
-    register: (name, email, password) => request('/auth/register', { method: 'POST', body: { name, email, password } }),
-    loginWithFirebase: (idToken) => request('/auth/firebase', { method: 'POST', body: { idToken } }),
-    loginWithGoogle: (payload) => request('/auth/google', { method: 'POST', body: payload }),
-    refresh: (refreshToken) => request('/auth/refresh', { method: 'POST', body: { refreshToken } }),
-    logout: (refreshToken) => request('/auth/logout', { method: 'POST', body: { refreshToken } }),
+    login: async (email, password) => {
+      const data = await request('/auth/login', { method: 'POST', body: { email, password } });
+      if (data?.token) setAccessToken(data.token);
+      return data;
+    },
+    register: async (name, email, password) => {
+      const data = await request('/auth/register', { method: 'POST', body: { name, email, password } });
+      if (data?.token) setAccessToken(data.token);
+      return data;
+    },
+    loginWithFirebase: async (idToken) => {
+      const data = await request('/auth/firebase', { method: 'POST', body: { idToken } });
+      if (data?.token) setAccessToken(data.token);
+      return data;
+    },
+    refresh: async () => {
+      const data = await request('/auth/refresh', { method: 'POST' });
+      if (data?.token) setAccessToken(data.token);
+      return data;
+    },
+    logout: async () => {
+      try {
+        return await request('/auth/logout', { method: 'POST' });
+      } finally {
+        clearAccessToken();
+      }
+    },
+    logoutAll: async () => {
+      try {
+        return await request('/auth/logout-all', { method: 'POST' });
+      } finally {
+        clearAccessToken();
+      }
+    },
     forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: { email } }),
     resetPassword: (token, newPassword) => request('/auth/reset-password', { method: 'POST', body: { token, newPassword } }),
     getProfile: () => request('/auth/me'),
