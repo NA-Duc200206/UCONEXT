@@ -64,3 +64,36 @@ jobs:
 
       - name: Build frontend
         run: npm run build:frontend
+
+  docker:
+    name: Docker build & smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate smoke-test .env from production template
+        run: |
+          cp .env.production.example .env
+          sed -i "s/__GEN__/$(openssl rand -hex 32)/g" .env
+
+      - name: Build and start Docker Compose stack
+        run: docker compose up -d --build --wait
+
+      - name: Verify health endpoint through Nginx edge and ensure backend port is not exposed
+        run: |
+          curl -fsS http://localhost:3000/api/health | grep '"status":"ok"'
+          if curl -fsS http://localhost:5000/api/health >/dev/null 2>&1; then
+            echo "Backend port 5000 should not be published on host"
+            exit 1
+          fi
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose logs backend
+
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose down -v

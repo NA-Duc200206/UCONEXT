@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 
-let mongoServer: MongoMemoryServer | null = null;
+let mongoServer: { getUri: () => string; stop: () => Promise<boolean> } | null = null;
 
 export const connectDB = async (): Promise<void> => {
   try {
@@ -17,7 +16,10 @@ export const connectDB = async (): Promise<void> => {
       if (process.env.NODE_ENV === 'production') {
         throw localErr;
       }
-      console.warn(`⚠️ Primary MongoDB connection failed (${localErr?.message || 'unknown error'}). Starting MongoMemoryServer fallback (data will NOT persist across restarts)...`);
+      console.warn(
+        `⚠️ Primary MongoDB connection failed (${localErr?.message || 'unknown error'}). Starting MongoMemoryServer fallback (data will NOT persist across restarts)...`
+      );
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
       mongoServer = await MongoMemoryServer.create();
       const uri = mongoServer.getUri();
       console.log(`⏳ Connecting to in-memory MongoDB: ${uri}`);

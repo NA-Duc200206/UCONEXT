@@ -2,6 +2,9 @@ services:
   mongodb:
     image: mongo:7
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?MONGO_ROOT_USER is required}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required}
     volumes:
       - uconext_mongo_data:/data/db
     healthcheck:
@@ -14,11 +17,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     volumes:
       - uconext_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -34,28 +39,28 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "${BACKEND_PORT:-5000}:5000"
+    expose:
+      - "5000"
     volumes:
       - uconext_uploads:/app/backend/public/uploads
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 5000
-      MONGODB_URI: mongodb://mongodb:27017/uconext
-      REDIS_URL: redis://redis:6379
+      MONGODB_URI: ${MONGODB_URI:-mongodb://${MONGO_ROOT_USER:?MONGO_ROOT_USER is required}:${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required}@mongodb:27017/uconext?authSource=admin}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
-      AUTO_SEED: ${AUTO_SEED:-true}
-      # Override with strong secrets in production deployments
-      JWT_SECRET: ${JWT_SECRET:-uconext_docker_dev_jwt_secret_change_in_prod_2026}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-uconext_docker_dev_refresh_secret_change_in_prod_2026}
-      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-1h}
+      AUTO_SEED: ${AUTO_SEED:-false}
+      ALLOW_PROD_SEED: ${ALLOW_PROD_SEED:-false}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      # Optional integrations (provide via host env or root .env)
+      PAYMENTS_VNPAY_ENABLED: ${PAYMENTS_VNPAY_ENABLED:-false}
       VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
       VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
       VNPAY_URL: ${VNPAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-http://localhost:3000/payment-result}
+      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-}
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       AI_MODEL: ${AI_MODEL:-}
       AI_API_KEY: ${AI_API_KEY:-}
@@ -65,13 +70,12 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
-      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+      SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
       SMTP_FROM: ${SMTP_FROM:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
 
   frontend:
@@ -94,4 +98,3 @@ volumes:
   uconext_mongo_data:
   uconext_redis_data:
   uconext_uploads:
-
