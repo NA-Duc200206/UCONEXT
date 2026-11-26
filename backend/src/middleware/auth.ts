@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Types } from 'mongoose';
 import { User } from '../models';
+import { getJwtSecret } from '../config/env';
 
 export interface AuthenticatedRequest extends Request {
   user?: any;
@@ -18,7 +19,7 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
 
     let decoded: any;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026');
+      decoded = jwt.verify(token, getJwtSecret());
     } catch {
       return res.status(401).json({ message: 'Authentication token is invalid or expired.' });
     }
@@ -59,7 +60,7 @@ export const optionalAuthenticateToken = async (req: AuthenticatedRequest, _res:
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return next();
 
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026');
+    const decoded: any = jwt.verify(token, getJwtSecret());
     if (decoded?.id && Types.ObjectId.isValid(String(decoded.id))) {
       const user = await User.findById(decoded.id);
       if (user) req.user = user;

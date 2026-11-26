@@ -50,6 +50,9 @@ describe('security & production config', () => {
       JWT_REFRESH_SECRET: 'your_jwt_refresh_secret_key_here',
       VNPAY_HASH_SECRET: 'HJGBUYTREWQLKJHGFDSAZXCVBNMKIOP',
       CLIENT_URL: 'https://uconext.com',
+      SMTP_HOST: 'smtp.uconext.com',
+      SMTP_USER: 'no-reply@uconext.com',
+      SMTP_PASS: 'strong-smtp-pass-2026',
     });
     expect(placeholderSecret).toHaveLength(2);
 
@@ -59,6 +62,9 @@ describe('security & production config', () => {
       JWT_SECRET: 'a_very_strong_random_production_secret_key_2026',
       JWT_REFRESH_SECRET: 'another_strong_random_refresh_secret_key_2026',
       CLIENT_URL: 'https://uconext.com',
+      SMTP_HOST: 'smtp.uconext.com',
+      SMTP_USER: 'no-reply@uconext.com',
+      SMTP_PASS: 'strong-smtp-pass-2026',
     });
     expect(valid).toEqual([]);
   });
