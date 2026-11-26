@@ -2,6 +2,7 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import { AddressInfo } from 'net';
+import sharp from 'sharp';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { connectTestDB, clearTestDB, disconnectTestDB } from './dbHelper';
 import app from '../src/server';
@@ -173,10 +174,14 @@ describe('Express HTTP routes, RBAC, CORS, and upload security', () => {
     });
     expect(svgRes.status).toBe(400);
 
-    // Valid PNG upload -> 200
-    const pngHeaderBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    // Valid PNG upload -> 200 (re-encoded to WebP with UUID filename)
+    const validPngBytes = await sharp({
+      create: { width: 4, height: 4, channels: 4, background: { r: 36, g: 84, b: 244, alpha: 1 } },
+    })
+      .png()
+      .toBuffer();
     const pngForm = new FormData();
-    pngForm.append('image', new Blob([pngHeaderBytes], { type: 'image/png' }), 'avatar.png');
+    pngForm.append('image', new Blob([new Uint8Array(validPngBytes)], { type: 'image/png' }), 'avatar.png');
     const pngRes = await fetch(`${baseUrl}/api/media/avatar`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -184,7 +189,7 @@ describe('Express HTTP routes, RBAC, CORS, and upload security', () => {
     });
     expect(pngRes.status).toBe(200);
     const pngBody: any = await pngRes.json();
-    expect(pngBody.imageUrl).toMatch(/^\/uploads\/prod_.*\.png$/);
+    expect(pngBody.imageUrl).toMatch(/^\/uploads\/avatar\/[0-9a-f-]+\.webp$/);
     createdUploadFiles.push(pngBody.imageUrl);
   });
 });

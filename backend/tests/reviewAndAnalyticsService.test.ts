@@ -45,7 +45,8 @@ describe('analyticsService & reviewService', () => {
       paymentMethod: 'cod',
     });
 
-    // Moving COD order to shipping MUST NOT mark it paid prematurely
+    // Moving COD order through confirmed -> shipping MUST NOT mark it paid prematurely
+    await orderService.updateOrderStatus(codOrder.id.toString(), 'confirmed');
     const shipped = await orderService.updateOrderStatus(codOrder.id.toString(), 'shipping');
     expect(shipped.status).toBe('shipping');
     expect(shipped.paymentStatus).toBe('pending');
@@ -105,6 +106,9 @@ describe('analyticsService & reviewService', () => {
       shippingAddress: '22 Hai Ba Trung, HCMC',
       paymentMethod: 'cod',
     });
+    await orderService.updateOrderStatus(order.id.toString(), 'confirmed');
+    await orderService.updateOrderStatus(order.id.toString(), 'shipping');
+    await orderService.updateOrderStatus(order.id.toString(), 'delivered');
     await orderService.updateOrderStatus(order.id.toString(), 'completed');
 
     await reviewService.addReview(verifiedBuyer._id.toString(), perfume._id.toString(), 5, 'Long-lasting scent.');

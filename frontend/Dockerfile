@@ -23,16 +23,16 @@ ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 
 RUN npm run build:frontend
 
-# ---- Stage 2: Serve static bundle via Nginx ----
-FROM nginx:1.27-alpine AS runner
+# ---- Stage 2: Serve static bundle via unprivileged Nginx ----
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runner
 
+COPY frontend/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1
+  CMD wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
-

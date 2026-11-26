@@ -1,9 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
-import rateLimit from 'express-rate-limit';
 import path from 'path';
-import fs from 'fs';
 import { authenticateToken, isAdmin } from '../middleware/auth';
+import { uploadLimiter } from '../middleware/rateLimits';
+import { sendSafeError } from '../middleware/errorHandler';
+import { extractStorageKeyFromUrl, storageService } from '../services/storageService';
 
 const router = Router();
 
@@ -19,25 +20,8 @@ export function isAllowedImageFile(originalname: string, mimetype: string): bool
   return ALLOWED_IMAGE_EXTENSIONS.has(ext) && ALLOWED_IMAGE_MIMES.has(mime);
 }
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../public/uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueName = `prod_${Date.now()}_${Math.round(Math.random() * 1e6)}${ext}`;
-    cb(null, uniqueName);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (_req, file, cb) => {
     if (isAllowedImageFile(file.originalname, file.mimetype)) {
@@ -50,14 +34,6 @@ const upload = multer({
   },
 });
 
-const avatarRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { message: 'Too many avatar upload attempts. Please try again later.' },
-});
-
 const singleImageUpload = (req: Request, res: Response, next: NextFunction) => {
   upload.single('image')(req, res, (err: any) => {
     if (!err) return next();
@@ -65,24 +41,56 @@ const singleImageUpload = (req: Request, res: Response, next: NextFunction) => {
       const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
       return res.status(status).json({ message: err.message });
     }
-    return res.status(err.statusCode || 400).json({
-      message: err.message || 'Invalid image upload.',
+    return sendSafeError(res, err, 400);
+  });
+};
+
+const handleProductUpload = async (req: any, res: Response) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: 'No image file uploaded.' });
+    }
+    const { url, key } = await storageService.putImage(req.file.buffer, 'product');
+    return res.status(200).json({
+      message: 'Image uploaded successfully.',
+      imageUrl: url,
+      key,
     });
-  });
-};
-
-const handleImageUpload = (req: any, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ message: 'No image file uploaded.' });
+  } catch (error: any) {
+    return sendSafeError(res, error, 500);
   }
-  const imageUrl = `/uploads/${req.file.filename}`;
-  return res.status(200).json({
-    message: 'Image uploaded successfully.',
-    imageUrl,
-  });
 };
 
-router.post('/upload', authenticateToken, isAdmin, singleImageUpload, handleImageUpload);
-router.post('/avatar', authenticateToken, avatarRateLimiter, singleImageUpload, handleImageUpload);
+const handleAvatarUpload = async (req: any, res: Response) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: 'No image file uploaded.' });
+    }
+    const previousAvatarKey = extractStorageKeyFromUrl(req.user?.avatar);
+    const { url, key } = await storageService.putImage(req.file.buffer, 'avatar');
+
+    if (req.user) {
+      req.user.avatar = url;
+      await req.user.save();
+    }
+
+    if (previousAvatarKey && previousAvatarKey !== key) {
+      storageService.deleteObject(previousAvatarKey).catch((err) => {
+        console.error('Failed to remove previous avatar:', err?.message || err);
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Image uploaded successfully.',
+      imageUrl: url,
+      key,
+    });
+  } catch (error: any) {
+    return sendSafeError(res, error, 500);
+  }
+};
+
+router.post('/upload', authenticateToken, isAdmin, uploadLimiter, singleImageUpload, handleProductUpload);
+router.post('/avatar', authenticateToken, uploadLimiter, singleImageUpload, handleAvatarUpload);
 
 export default router;

@@ -32,6 +32,11 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
       return res.status(404).json({ message: 'User does not exist.' });
     }
 
+    const currentTokenVersion = typeof user.tokenVersion === 'number' ? user.tokenVersion : 0;
+    if (typeof decoded.tv !== 'number' || decoded.tv !== currentTokenVersion) {
+      return res.status(401).json({ message: 'Authentication token has been revoked.' });
+    }
+
     req.user = user;
     return next();
   } catch (error: any) {
@@ -62,7 +67,10 @@ export const optionalAuthenticateToken = async (req: AuthenticatedRequest, _res:
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_glowstore_2026');
     if (decoded?.id && Types.ObjectId.isValid(String(decoded.id))) {
       const user = await User.findById(decoded.id);
-      if (user) req.user = user;
+      const currentTokenVersion = typeof user?.tokenVersion === 'number' ? user.tokenVersion : 0;
+      if (user && typeof decoded.tv === 'number' && decoded.tv === currentTokenVersion) {
+        req.user = user;
+      }
     }
   } catch {
     // Ignore invalid/expired token for optional auth endpoints

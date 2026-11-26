@@ -39,6 +39,7 @@ export interface IUser extends Document {
   preferredCategories: Schema.Types.ObjectId[];
   recentlyViewed: IRecentlyViewedItem[];
   savedAddresses: ISavedAddress[];
+  tokenVersion: number;
   refreshTokens: string[];
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
@@ -92,6 +93,7 @@ const UserSchema = new Schema<IUser>({
   preferredCategories: { type: [{ type: Schema.Types.ObjectId, ref: 'Category' }], default: [] },
   recentlyViewed: { type: [RecentlyViewedSchema], default: [] },
   savedAddresses: { type: [SavedAddressSchema], default: [] },
+  tokenVersion: { type: Number, default: 0 },
   refreshTokens: { type: [String], default: [], select: false },
   resetPasswordToken: { type: String, select: false },
   resetPasswordExpires: { type: Date, select: false }
