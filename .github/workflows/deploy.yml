@@ -15,8 +15,9 @@ on:
           - staging
           - production
       image_tag:
-        description: 'Optional existing image tag to deploy (defaults to current sha)'
+        description: 'Optional existing image tag to deploy/rollback (leave empty to build current commit)'
         required: false
+        default: ''
         type: string
 
 permissions:
@@ -45,19 +46,47 @@ jobs:
 
       - name: Compute image metadata
         id: meta
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          DISPATCH_TARGET: ${{ inputs.target }}
         run: |
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          OWNER_LOWER=$(echo "${REPO_OWNER}" | tr '[:upper:]' '[:lower:]')
+          PREFIX="${REGISTRY}/${OWNER_LOWER}"
           SHA_TAG="sha-${GITHUB_SHA::12}"
-          echo "registry_prefix=${REGISTRY}/${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
-          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "release_tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* || "${DISPATCH_TARGET}" == "production" ]]; then
+            SENTRY_ENV="production"
+          else
+            SENTRY_ENV="staging"
           fi
 
+          {
+            echo "registry_prefix=${PREFIX}"
+            echo "sha_tag=${SHA_TAG}"
+            echo "sentry_env=${SENTRY_ENV}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "backend_tags<<EOF"
+            echo "${PREFIX}/uconext-backend:${SHA_TAG}"
+            if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              echo "${PREFIX}/uconext-backend:${GITHUB_REF#refs/tags/}"
+            fi
+            echo "EOF"
+            echo "frontend_tags<<EOF"
+            echo "${PREFIX}/uconext-frontend:${SHA_TAG}"
+            if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              echo "${PREFIX}/uconext-frontend:${GITHUB_REF#refs/tags/}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
+        if: inputs.image_tag == ''
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: inputs.image_tag == ''
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -65,18 +94,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push backend image
+        if: inputs.image_tag == ''
         uses: docker/build-push-action@v6
         with:
           context: .
           file: backend/Dockerfile
           push: true
-          tags: |
-            ${{ steps.meta.outputs.registry_prefix }}/uconext-backend:${{ steps.meta.outputs.sha_tag }}
-            ${{ steps.meta.outputs.release_tag && format('{0}/uconext-backend:{1}', steps.meta.outputs.registry_prefix, steps.meta.outputs.release_tag) || '' }}
+          tags: ${{ steps.meta.outputs.backend_tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build and push frontend image
+        if: inputs.image_tag == ''
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -88,10 +117,8 @@ jobs:
             VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
             VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
             VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
-            VITE_SENTRY_ENVIRONMENT=${{ startsWith(github.ref, 'refs/tags/v') && 'production' || 'staging' }}
-          tags: |
-            ${{ steps.meta.outputs.registry_prefix }}/uconext-frontend:${{ steps.meta.outputs.sha_tag }}
-            ${{ steps.meta.outputs.release_tag && format('{0}/uconext-frontend:{1}', steps.meta.outputs.registry_prefix, steps.meta.outputs.release_tag) || '' }}
+            VITE_SENTRY_ENVIRONMENT=${{ steps.meta.outputs.sentry_env }}
+          tags: ${{ steps.meta.outputs.frontend_tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -99,7 +126,9 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [build-and-push]
-    if: github.ref == 'refs/heads/dev' || (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')
     environment:
       name: staging
       url: https://staging.uconext.vn
@@ -113,7 +142,7 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/uconext' }}
           HEALTH_URL: ${{ vars.HEALTH_URL || 'https://staging.uconext.vn/api/health' }}
@@ -122,16 +151,32 @@ jobs:
           IMAGE_REGISTRY: ${{ needs.build-and-push.outputs.image_registry }}
           NEW_TAG: ${{ inputs.image_tag || needs.build-and-push.outputs.image_tag }}
         run: |
+          set -euo pipefail
+          if [[ -z "${SSH_HOST}" || -z "${SSH_USER}" || -z "${SSH_KEY}" ]]; then
+            echo "Missing DEPLOY_SSH_HOST, DEPLOY_SSH_USER, or DEPLOY_SSH_KEY in staging environment secrets."
+            exit 1
+          fi
+
+          trap 'rm -f /tmp/deploy_key' EXIT
           install -m 600 /dev/null /tmp/deploy_key
           printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
+
           scp -i /tmp/deploy_key -P "$SSH_PORT" -o StrictHostKeyChecking=accept-new \
             docker-compose.prod.yml "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/docker-compose.prod.yml"
-          ssh -i /tmp/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" \
-            "IMAGE_REGISTRY='${IMAGE_REGISTRY}' NEW_TAG='${NEW_TAG}' DEPLOY_DIR='${DEPLOY_DIR}' HEALTH_URL='${HEALTH_URL}' GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}' bash -s" <<'EOF'
-          set -euo pipefail
-          cd "$DEPLOY_DIR"
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
+          printf '%s' "$GHCR_TOKEN" | ssh -i /tmp/deploy_key -p "$SSH_PORT" \
+            -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" \
+            "docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin"
+
+          ssh -i /tmp/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" \
+            bash -s -- "$IMAGE_REGISTRY" "$NEW_TAG" "$DEPLOY_DIR" "$HEALTH_URL" <<'EOF'
+          set -euo pipefail
+          IMAGE_REGISTRY="$1"
+          NEW_TAG="$2"
+          DEPLOY_DIR="$3"
+          HEALTH_URL="$4"
+
+          cd "$DEPLOY_DIR"
           PREV_TAG=$(grep -E '^IMAGE_TAG=' .env | tail -n1 | cut -d'=' -f2- || true)
 
           update_env() {
@@ -144,38 +189,40 @@ jobs:
             fi
           }
 
+          rollback() {
+            if [[ -n "$PREV_TAG" ]]; then
+              echo "Rolling back to ${PREV_TAG}"
+              update_env "IMAGE_TAG" "$PREV_TAG"
+              docker compose -f docker-compose.prod.yml pull
+              docker compose -f docker-compose.prod.yml up -d --wait
+            fi
+          }
+
           update_env "IMAGE_REGISTRY" "$IMAGE_REGISTRY"
           update_env "IMAGE_TAG" "$NEW_TAG"
 
           docker compose -f docker-compose.prod.yml pull
           if ! docker compose -f docker-compose.prod.yml up -d --wait; then
-            echo "Container startup failed; initiating rollback to ${PREV_TAG:-none}"
-            if [ -n "$PREV_TAG" ]; then
-              update_env "IMAGE_TAG" "$PREV_TAG"
-              docker compose -f docker-compose.prod.yml pull
-              docker compose -f docker-compose.prod.yml up -d --wait
-            fi
+            echo "Container startup failed."
+            rollback
             exit 1
           fi
 
           if ! curl -fsS --retry 5 --retry-delay 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
-            echo "Health smoke check failed on ${HEALTH_URL}; rolling back to ${PREV_TAG:-none}"
-            if [ -n "$PREV_TAG" ]; then
-              update_env "IMAGE_TAG" "$PREV_TAG"
-              docker compose -f docker-compose.prod.yml pull
-              docker compose -f docker-compose.prod.yml up -d --wait
-            fi
+            echo "Health smoke check failed on ${HEALTH_URL}."
+            rollback
             exit 1
           fi
           echo "Successfully deployed ${NEW_TAG} and verified ${HEALTH_URL}"
           EOF
-          rm -f /tmp/deploy_key
 
   deploy-production:
     name: Deploy to Production (Approval Required)
     runs-on: ubuntu-latest
     needs: [build-and-push]
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
     environment:
       name: production
       url: https://uconext.vn
@@ -189,7 +236,7 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/uconext' }}
           HEALTH_URL: ${{ vars.HEALTH_URL || 'https://uconext.vn/api/health' }}
@@ -198,16 +245,32 @@ jobs:
           IMAGE_REGISTRY: ${{ needs.build-and-push.outputs.image_registry }}
           NEW_TAG: ${{ inputs.image_tag || needs.build-and-push.outputs.image_tag }}
         run: |
+          set -euo pipefail
+          if [[ -z "${SSH_HOST}" || -z "${SSH_USER}" || -z "${SSH_KEY}" ]]; then
+            echo "Missing DEPLOY_SSH_HOST, DEPLOY_SSH_USER, or DEPLOY_SSH_KEY in production environment secrets."
+            exit 1
+          fi
+
+          trap 'rm -f /tmp/deploy_key' EXIT
           install -m 600 /dev/null /tmp/deploy_key
           printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
+
           scp -i /tmp/deploy_key -P "$SSH_PORT" -o StrictHostKeyChecking=accept-new \
             docker-compose.prod.yml "${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/docker-compose.prod.yml"
-          ssh -i /tmp/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" \
-            "IMAGE_REGISTRY='${IMAGE_REGISTRY}' NEW_TAG='${NEW_TAG}' DEPLOY_DIR='${DEPLOY_DIR}' HEALTH_URL='${HEALTH_URL}' GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}' bash -s" <<'EOF'
-          set -euo pipefail
-          cd "$DEPLOY_DIR"
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
+          printf '%s' "$GHCR_TOKEN" | ssh -i /tmp/deploy_key -p "$SSH_PORT" \
+            -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" \
+            "docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin"
+
+          ssh -i /tmp/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new "${SSH_USER}@${SSH_HOST}" \
+            bash -s -- "$IMAGE_REGISTRY" "$NEW_TAG" "$DEPLOY_DIR" "$HEALTH_URL" <<'EOF'
+          set -euo pipefail
+          IMAGE_REGISTRY="$1"
+          NEW_TAG="$2"
+          DEPLOY_DIR="$3"
+          HEALTH_URL="$4"
+
+          cd "$DEPLOY_DIR"
           PREV_TAG=$(grep -E '^IMAGE_TAG=' .env | tail -n1 | cut -d'=' -f2- || true)
 
           update_env() {
@@ -220,29 +283,29 @@ jobs:
             fi
           }
 
+          rollback() {
+            if [[ -n "$PREV_TAG" ]]; then
+              echo "Rolling back to ${PREV_TAG}"
+              update_env "IMAGE_TAG" "$PREV_TAG"
+              docker compose -f docker-compose.prod.yml pull
+              docker compose -f docker-compose.prod.yml up -d --wait
+            fi
+          }
+
           update_env "IMAGE_REGISTRY" "$IMAGE_REGISTRY"
           update_env "IMAGE_TAG" "$NEW_TAG"
 
           docker compose -f docker-compose.prod.yml pull
           if ! docker compose -f docker-compose.prod.yml up -d --wait; then
-            echo "Container startup failed; initiating rollback to ${PREV_TAG:-none}"
-            if [ -n "$PREV_TAG" ]; then
-              update_env "IMAGE_TAG" "$PREV_TAG"
-              docker compose -f docker-compose.prod.yml pull
-              docker compose -f docker-compose.prod.yml up -d --wait
-            fi
+            echo "Container startup failed."
+            rollback
             exit 1
           fi
 
           if ! curl -fsS --retry 5 --retry-delay 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
-            echo "Health smoke check failed on ${HEALTH_URL}; rolling back to ${PREV_TAG:-none}"
-            if [ -n "$PREV_TAG" ]; then
-              update_env "IMAGE_TAG" "$PREV_TAG"
-              docker compose -f docker-compose.prod.yml pull
-              docker compose -f docker-compose.prod.yml up -d --wait
-            fi
+            echo "Health smoke check failed on ${HEALTH_URL}."
+            rollback
             exit 1
           fi
           echo "Successfully deployed ${NEW_TAG} and verified ${HEALTH_URL}"
           EOF
-          rm -f /tmp/deploy_key
