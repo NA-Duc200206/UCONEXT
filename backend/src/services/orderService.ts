@@ -1,18 +1,83 @@
-import { Types } from 'mongoose';
-import { Order, Product, Coupon } from '../models';
+import { ClientSession, Types } from 'mongoose';
+import { Order, Product, Coupon, CouponRedemption } from '../models';
+import { withTransaction } from '../config/db';
 import { emitOrderEvent } from '../config/socket';
 import { emailService } from './emailService';
 import { couponService } from './couponService';
 import { cacheService } from '../utils/cache';
 import { auditService } from './auditService';
+import { assertTransition, isRestockedStatus, OrderStatus } from './orderTransitions';
 
-function createOrderError(message: string, statusCode = 400) {
+function createOrderError(message: string, statusCode = 400, code?: string) {
   const error: any = new Error(message);
   error.statusCode = statusCode;
+  if (code) error.code = code;
   return error;
 }
 
 const DEFAULT_VNPAY_RESERVATION_MS = 15 * 60 * 1000;
+export const COD_MAX_TOTAL_VND = 5_000_000;
+export const COD_MAX_ACTIVE_ORDERS = 2;
+const ACTIVE_COD_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'packaging', 'shipping'];
+
+async function claimPerUserCouponSlot(params: {
+  couponId: Types.ObjectId;
+  userId: Types.ObjectId;
+  orderId: Types.ObjectId;
+  perUserLimit: number;
+  session: ClientSession | null;
+}) {
+  const { couponId, userId, orderId, perUserLimit, session } = params;
+  const createOpts = session ? { session } : undefined;
+
+  if (perUserLimit <= 0) {
+    await CouponRedemption.create([{ couponId, userId, orderId }], createOpts);
+    return;
+  }
+
+  const existingQuery = CouponRedemption.find({ couponId, userId }).select('slot');
+  if (session) existingQuery.session(session);
+  const existing = await existingQuery;
+  const usedSlots = new Set(existing.map((r) => r.slot).filter((s): s is number => typeof s === 'number'));
+
+  for (let slot = 0; slot < perUserLimit; slot += 1) {
+    if (usedSlots.has(slot)) continue;
+    try {
+      await CouponRedemption.create([{ couponId, userId, orderId, slot }], createOpts);
+      return;
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        // Concurrent request claimed this slot; try next slot if available
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw createOrderError(
+    `You have already reached the usage limit (${perUserLimit}) for this coupon.`,
+    400
+  );
+}
+
+async function restockOrderAndReleaseCoupon(
+  order: { _id: any; items: Array<{ productId: any; quantity: number }>; couponCode?: string },
+  session: ClientSession | null,
+  releaseCoupon: boolean
+) {
+  const opts = session ? { session } : undefined;
+  for (const item of order.items) {
+    await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } }, opts);
+  }
+  if (releaseCoupon && order.couponCode) {
+    await Coupon.updateOne(
+      { code: order.couponCode, usedCount: { $gt: 0 } },
+      { $inc: { usedCount: -1 } },
+      opts
+    );
+    await CouponRedemption.deleteMany({ orderId: order._id }, opts);
+  }
+}
 
 export const orderService = {
   async createOrder(
@@ -45,9 +110,10 @@ export const orderService = {
         throw createOrderError('Invalid product identifier in cart.', 400);
       }
 
-      const rawQty = typeof item?.quantity === 'string' && item.quantity.trim() !== ''
-        ? Number(item.quantity)
-        : item?.quantity;
+      const rawQty =
+        typeof item?.quantity === 'string' && item.quantity.trim() !== ''
+          ? Number(item.quantity)
+          : item?.quantity;
       if (typeof rawQty !== 'number' || !Number.isInteger(rawQty) || rawQty < 1) {
         throw createOrderError('Item quantity must be a positive integer.', 400);
       }
@@ -56,151 +122,219 @@ export const orderService = {
     }
 
     const uniqueProductIds = Array.from(qtyByProductId.keys());
-    const products = await Product.find({
-      _id: { $in: uniqueProductIds },
-      isDeleted: { $ne: true },
-    });
-    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+    const userObjectId = new Types.ObjectId(userId);
 
-    for (const [pid, totalRequestedQty] of qtyByProductId.entries()) {
-      const product = productMap.get(pid);
-      if (!product) {
-        throw createOrderError('Product not found.', 400);
+    const createdOrderId = await withTransaction(async (session) => {
+      const findOpts = session ? { session } : undefined;
+      const productsQuery = Product.find({
+        _id: { $in: uniqueProductIds },
+        isDeleted: { $ne: true },
+      });
+      if (session) productsQuery.session(session);
+      const products = await productsQuery;
+      const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+
+      for (const [pid, totalRequestedQty] of qtyByProductId.entries()) {
+        const product = productMap.get(pid);
+        if (!product) {
+          throw createOrderError('Product not found.', 400);
+        }
+        if (product.stock < totalRequestedQty) {
+          throw createOrderError(
+            `Product "${product.name}" has insufficient stock (available: ${product.stock}).`,
+            400
+          );
+        }
       }
-      if (product.stock < totalRequestedQty) {
-        throw createOrderError(
-          `Product "${product.name}" has insufficient stock (available: ${product.stock}).`,
-          400
-        );
-      }
-    }
 
-    let subtotal = 0;
-    const orderItems = items.map((item) => {
-      const pid = String(item.productId).trim();
-      const product = productMap.get(pid)!;
-      const itemQuantity = Number(item.quantity);
-      const itemPrice = product.price;
-      subtotal += itemPrice * itemQuantity;
+      let subtotal = 0;
+      const orderItems = items.map((item) => {
+        const pid = String(item.productId).trim();
+        const product = productMap.get(pid)!;
+        const itemQuantity = Number(item.quantity);
+        const itemPrice = product.price;
+        subtotal += itemPrice * itemQuantity;
 
-      return {
-        productId: product._id,
-        name: product.name,
-        price: itemPrice,
-        image: product.image,
-        quantity: itemQuantity,
-        color: item.color || undefined,
-        size: item.size || undefined,
+        return {
+          productId: product._id,
+          name: product.name,
+          price: itemPrice,
+          image: product.image,
+          quantity: itemQuantity,
+          color: item.color || undefined,
+          size: item.size || undefined,
+        };
+      });
+
+      const orderObjectId = new Types.ObjectId();
+
+      // Track reservations for standalone (non-transaction) manual rollback
+      const deductedStock: Array<{ productId: string; qty: number }> = [];
+      let reservedCouponId: Types.ObjectId | null = null;
+      let createdRedemption = false;
+
+      const manualRollback = async () => {
+        if (session) return; // MongoDB transaction aborts automatically
+        for (const entry of deductedStock) {
+          await Product.findByIdAndUpdate(entry.productId, { $inc: { stock: entry.qty } });
+        }
+        if (createdRedemption) {
+          await CouponRedemption.deleteMany({ orderId: orderObjectId });
+        }
+        if (reservedCouponId) {
+          await Coupon.updateOne(
+            { _id: reservedCouponId, usedCount: { $gt: 0 } },
+            { $inc: { usedCount: -1 } }
+          );
+        }
       };
-    });
 
-    // Validate & atomically reserve coupon usage if supplied
-    let discountAmount = 0;
-    let appliedCoupon: string | undefined = undefined;
-    let reservedCouponId: any = null;
+      try {
+        let discountAmount = 0;
+        let appliedCoupon: string | undefined = undefined;
 
-    if (couponCode) {
-      const validation = await couponService.validateCoupon(couponCode, subtotal, userId);
-      const reservedCoupon = await Coupon.findOneAndUpdate(
-        {
-          _id: validation.coupon.id,
-          isDeleted: false,
-          $expr: { $lt: ['$usedCount', '$usageLimit'] },
-        },
-        { $inc: { usedCount: 1 } },
-        { returnDocument: 'after' }
-      );
+        if (couponCode) {
+          const validation = await couponService.validateCoupon(couponCode, subtotal, userId, session);
+          const couponObjectId = new Types.ObjectId(String(validation.coupon.id));
+          const perUserLimit =
+            typeof validation.coupon.perUserLimit === 'number' ? validation.coupon.perUserLimit : 1;
 
-      if (!reservedCoupon) {
-        throw createOrderError('Coupon usage limit has been reached.', 400);
-      }
+          // Atomically claim per-user coupon slot first via unique index
+          await claimPerUserCouponSlot({
+            couponId: couponObjectId,
+            userId: userObjectId,
+            orderId: orderObjectId,
+            perUserLimit,
+            session,
+          });
+          createdRedemption = true;
 
-      discountAmount = validation.discountAmount;
-      appliedCoupon = validation.code;
-      reservedCouponId = reservedCoupon._id;
-    }
+          const reservedCoupon = await Coupon.findOneAndUpdate(
+            {
+              _id: couponObjectId,
+              isDeleted: false,
+              $expr: { $lt: ['$usedCount', '$usageLimit'] },
+            },
+            { $inc: { usedCount: 1 } },
+            { returnDocument: 'after', ...(findOpts || {}) }
+          );
 
-    const shippingFee = subtotal > 1000000 ? 0 : 30000;
-    const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+          if (!reservedCoupon) {
+            throw createOrderError('Coupon usage limit has been reached.', 400);
+          }
 
-    // Atomically deduct stock per unique product; roll back on any concurrent shortage or write failure
-    const deductedStock: Array<{ productId: string; qty: number }> = [];
-    const rollbackReservations = async () => {
-      for (const entry of deductedStock) {
-        await Product.findByIdAndUpdate(entry.productId, { $inc: { stock: entry.qty } });
-      }
-      if (reservedCouponId) {
-        await Coupon.updateOne({ _id: reservedCouponId, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
-      }
-    };
-
-    try {
-      for (const [pid, totalQty] of qtyByProductId.entries()) {
-        const updatedProduct = await Product.findOneAndUpdate(
-          {
-            _id: pid,
-            isDeleted: { $ne: true },
-            stock: { $gte: totalQty },
-          },
-          { $inc: { stock: -totalQty } },
-          { returnDocument: 'after' }
-        );
-
-        if (!updatedProduct) {
-          const prodName = productMap.get(pid)?.name || 'Selected item';
-          throw createOrderError(`Product "${prodName}" has insufficient stock.`, 400);
+          discountAmount = validation.discountAmount;
+          appliedCoupon = validation.code;
+          reservedCouponId = reservedCoupon._id as Types.ObjectId;
         }
 
-        deductedStock.push({ productId: pid, qty: totalQty });
+        const shippingFee = subtotal > 1000000 ? 0 : 30000;
+        const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
+
+        // Enforce COD risk caps (Decision D3)
+        if (normalizedMethod === 'cod') {
+          if (totalAmount > COD_MAX_TOTAL_VND) {
+            throw createOrderError(
+              `COD orders are limited to ${COD_MAX_TOTAL_VND.toLocaleString('en-US')} VND. Please use VNPAY for higher-value orders.`,
+              400,
+              'COD_LIMIT_EXCEEDED'
+            );
+          }
+
+          const activeCodQuery = Order.countDocuments({
+            userId: userObjectId as any,
+            paymentMethod: 'cod',
+            status: { $in: ACTIVE_COD_STATUSES },
+          });
+          if (session) activeCodQuery.session(session);
+          const activeCodCount = await activeCodQuery;
+
+          if (activeCodCount >= COD_MAX_ACTIVE_ORDERS) {
+            throw createOrderError(
+              `You can have at most ${COD_MAX_ACTIVE_ORDERS} active undelivered COD orders at a time.`,
+              400,
+              'COD_ACTIVE_LIMIT_EXCEEDED'
+            );
+          }
+        }
+
+        for (const [pid, totalQty] of qtyByProductId.entries()) {
+          const updatedProduct = await Product.findOneAndUpdate(
+            {
+              _id: pid,
+              isDeleted: { $ne: true },
+              stock: { $gte: totalQty },
+            },
+            { $inc: { stock: -totalQty } },
+            { returnDocument: 'after', ...(findOpts || {}) }
+          );
+
+          if (!updatedProduct) {
+            const prodName = productMap.get(pid)?.name || 'Selected item';
+            throw createOrderError(`Product "${prodName}" has insufficient stock.`, 400);
+          }
+
+          deductedStock.push({ productId: pid, qty: totalQty });
+        }
+
+        const paymentDeadline =
+          normalizedMethod === 'vnpay'
+            ? new Date(Date.now() + DEFAULT_VNPAY_RESERVATION_MS)
+            : undefined;
+
+        const orderDoc = new Order({
+          _id: orderObjectId,
+          userId: userObjectId,
+          shippingAddress: normalizedAddress,
+          paymentMethod: normalizedMethod,
+          paymentStatus: 'pending',
+          status: 'pending',
+          items: orderItems as any,
+          couponCode: appliedCoupon || undefined,
+          discountAmount,
+          totalAmount,
+          paymentDeadline,
+          statusHistory: [
+            {
+              status: 'pending',
+              timestamp: new Date(),
+              note: `Order placed successfully.${appliedCoupon ? ` (Coupon: ${appliedCoupon})` : ''}`,
+            },
+          ],
+        } as any);
+
+        await orderDoc.save(findOpts);
+        return orderDoc._id;
+      } catch (err) {
+        await manualRollback();
+        throw err;
       }
+    });
 
-      const order = await Order.create({
-        userId,
-        shippingAddress: normalizedAddress,
-        paymentMethod: normalizedMethod,
-        paymentStatus: 'pending',
-        status: 'pending',
-        items: orderItems as any,
-        couponCode: appliedCoupon || undefined,
-        discountAmount,
-        totalAmount,
-        statusHistory: [
-          {
-            status: 'pending',
-            timestamp: new Date(),
-            note: `Order placed successfully.${appliedCoupon ? ` (Coupon: ${appliedCoupon})` : ''}`,
-          },
-        ],
-      } as any);
+    const populatedOrder = await Order.findById(createdOrderId)
+      .populate('userId', 'name email')
+      .populate('items.productId', 'name image');
 
-      const populatedOrder = await Order.findById(order._id)
-        .populate('userId', 'name email')
-        .populate('items.productId', 'name image');
+    const obj = populatedOrder ? (populatedOrder as any).toObject() : { _id: createdOrderId };
+    const result = {
+      ...obj,
+      id: obj._id,
+    };
 
-      const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
-      const result = {
-        ...obj,
-        id: obj._id,
-      };
-
-      await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
-      emitOrderEvent('order:created', result);
-      if (populatedOrder && (populatedOrder as any).userId?.email) {
-        emailService.sendOrderConfirmation({
-          orderId: obj._id.toString(),
-          customerEmail: (populatedOrder as any).userId.email,
-          customerName: (populatedOrder as any).userId.name || 'Valued Customer',
-          totalAmount: obj.totalAmount,
-          items: obj.items,
-          shippingAddress: obj.shippingAddress,
-        });
-      }
-
-      return result;
-    } catch (err) {
-      await rollbackReservations();
-      throw err;
+    await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
+    emitOrderEvent('order:created', result);
+    if (populatedOrder && (populatedOrder as any).userId?.email) {
+      emailService.sendOrderConfirmation({
+        orderId: obj._id.toString(),
+        customerEmail: (populatedOrder as any).userId.email,
+        customerName: (populatedOrder as any).userId.name || 'Valued Customer',
+        totalAmount: obj.totalAmount,
+        items: obj.items,
+        shippingAddress: obj.shippingAddress,
+      });
     }
+
+    return result;
   },
 
   async getMyOrders(userId: string) {
@@ -272,57 +406,87 @@ export const orderService = {
       throw createOrderError('Order does not exist.', 404);
     }
 
-    const order = await Order.findById(id);
-    if (!order) {
-      throw createOrderError('Order does not exist.', 404);
-    }
+    const { updatedOrder, previousStatus, previousPaymentStatus } = await withTransaction(
+      async (session) => {
+        const findOpts = session ? { session } : undefined;
+        const orderQuery = Order.findById(id);
+        if (session) orderQuery.session(session);
+        const order = await orderQuery;
 
-    const previousStatus = order.status;
-    const previousPaymentStatus = order.paymentStatus;
-    const isRestockedState = (s: string) => s === 'cancelled' || s === 'refund_completed';
+        if (!order) {
+          throw createOrderError('Order does not exist.', 404);
+        }
 
-    if (status) {
-      order.status = status as any;
-      order.statusHistory.push({
-        status: status as any,
-        timestamp: new Date(),
-        note: 'Status updated by Admin.',
-      });
+        const prevStatus = order.status as OrderStatus;
+        const prevPaymentStatus = order.paymentStatus;
 
-      if (status === 'delivered' || status === 'completed') {
-        order.paymentStatus = 'paid';
+        if (status) {
+          assertTransition(prevStatus, status);
+        }
+
+        const nextStatus = (status || prevStatus) as OrderStatus;
+        let nextPaymentStatus = order.paymentStatus;
+        if (status === 'delivered' || status === 'completed') {
+          nextPaymentStatus = 'paid';
+        }
+        if (paymentStatus) {
+          nextPaymentStatus = paymentStatus as any;
+        }
+
+        const updateDoc: any = {
+          $set: {
+            status: nextStatus,
+            paymentStatus: nextPaymentStatus,
+          },
+        };
+        if (status && status !== prevStatus) {
+          updateDoc.$push = {
+            statusHistory: {
+              status: nextStatus,
+              timestamp: new Date(),
+              note: 'Status updated by Admin.',
+            },
+          };
+        }
+
+        const atomicOrder = await Order.findOneAndUpdate(
+          { _id: id, status: prevStatus },
+          updateDoc,
+          { returnDocument: 'after', ...(findOpts || {}) }
+        );
+
+        if (!atomicOrder) {
+          throw createOrderError(
+            'Order status was modified concurrently. Please refresh and try again.',
+            409,
+            'CONCURRENT_ORDER_MODIFICATION'
+          );
+        }
+
+        if (!isRestockedStatus(prevStatus) && isRestockedStatus(nextStatus)) {
+          await restockOrderAndReleaseCoupon(
+            atomicOrder as any,
+            session,
+            nextStatus === 'cancelled' || nextStatus === 'refund_completed'
+          );
+        }
+
+        return {
+          updatedOrder: atomicOrder,
+          previousStatus: prevStatus,
+          previousPaymentStatus: prevPaymentStatus,
+        };
       }
+    );
 
-      if (!isRestockedState(previousStatus) && isRestockedState(status)) {
-        for (const item of order.items) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-        }
-        if (status === 'cancelled' && order.couponCode) {
-          await Coupon.updateOne({ code: order.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
-        }
-      } else if (isRestockedState(previousStatus) && !isRestockedState(status)) {
-        for (const item of order.items) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
-        }
-        if (previousStatus === 'cancelled' && order.couponCode) {
-          await Coupon.updateOne({ code: order.couponCode }, { $inc: { usedCount: 1 } });
-        }
-      }
-    }
-
-    if (paymentStatus) {
-      order.paymentStatus = paymentStatus as any;
-    }
-
-    await order.save();
     await cacheService.invalidateByPrefix('cache:products:', 'cache:analytics:');
     await auditService.record({
       userId: actorId,
       action: 'ORDER_STATUS_UPDATE',
       targetType: 'Order',
-      targetId: String(order._id),
+      targetId: String(updatedOrder._id),
       oldValue: { status: previousStatus, paymentStatus: previousPaymentStatus },
-      newValue: { status: order.status, paymentStatus: order.paymentStatus },
+      newValue: { status: updatedOrder.status, paymentStatus: updatedOrder.paymentStatus },
       ipAddress,
     });
 
@@ -330,7 +494,7 @@ export const orderService = {
       .populate('userId', 'name email')
       .populate('items.productId', 'name image');
 
-    const obj = populatedOrder ? (populatedOrder as any).toObject() : order.toObject();
+    const obj = populatedOrder ? (populatedOrder as any).toObject() : updatedOrder.toObject();
     const result = {
       ...obj,
       id: obj._id,
@@ -350,40 +514,46 @@ export const orderService = {
       throw createOrderError('Order does not exist.', 404);
     }
 
-    const order = await Order.findById(id);
-    if (!order) {
-      throw createOrderError('Order does not exist.', 404);
-    }
+    const cancelledOrder = await withTransaction(async (session) => {
+      const findOpts = session ? { session } : undefined;
+      const orderQuery = Order.findById(id);
+      if (session) orderQuery.session(session);
+      const order = await orderQuery;
 
-    if (order.userId.toString() !== userId.toString()) {
-      throw createOrderError('You do not have permission to cancel this order.', 403);
-    }
+      if (!order) {
+        throw createOrderError('Order does not exist.', 404);
+      }
 
-    if (order.status !== 'pending') {
-      throw createOrderError(`Cannot cancel order in "${order.status}" status.`, 400);
-    }
+      if (order.userId.toString() !== userId.toString()) {
+        throw createOrderError('You do not have permission to cancel this order.', 403);
+      }
 
-    const cancelledOrder = await Order.findOneAndUpdate(
-      { _id: id, status: 'pending' },
-      {
-        $set: { status: 'cancelled' },
-        $push: {
-          statusHistory: { status: 'cancelled', timestamp: new Date(), note: 'Order cancelled by customer.' },
+      if (order.paymentStatus === 'paid') {
+        throw createOrderError('Cannot cancel an order that has already been paid.', 400);
+      }
+
+      if (order.status !== 'pending') {
+        throw createOrderError(`Cannot cancel order in "${order.status}" status.`, 400);
+      }
+
+      const atomicCancelled = await Order.findOneAndUpdate(
+        { _id: id, userId: order.userId, status: 'pending', paymentStatus: { $ne: 'paid' } },
+        {
+          $set: { status: 'cancelled' },
+          $push: {
+            statusHistory: { status: 'cancelled', timestamp: new Date(), note: 'Order cancelled by customer.' },
+          },
         },
-      },
-      { returnDocument: 'after' }
-    );
+        { returnDocument: 'after', ...(findOpts || {}) }
+      );
 
-    if (!cancelledOrder) {
-      throw createOrderError('Order can no longer be cancelled.', 400);
-    }
+      if (!atomicCancelled) {
+        throw createOrderError('Order can no longer be cancelled.', 400);
+      }
 
-    for (const item of cancelledOrder.items) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-    }
-    if (cancelledOrder.couponCode) {
-      await Coupon.updateOne({ code: cancelledOrder.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
-    }
+      await restockOrderAndReleaseCoupon(atomicCancelled as any, session, true);
+      return atomicCancelled;
+    });
 
     const populatedOrder = await Order.findById(id)
       .populate('userId', 'name email')
@@ -456,46 +626,50 @@ export const orderService = {
   },
 
   async expireStaleVnpayOrders(maxAgeMs: number = DEFAULT_VNPAY_RESERVATION_MS): Promise<number> {
-    const cutoff = new Date(Date.now() - Math.max(60_000, maxAgeMs));
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - Math.max(60_000, maxAgeMs));
     const candidates = await Order.find({
       paymentMethod: 'vnpay',
       status: 'pending',
       paymentStatus: 'pending',
-      createdAt: { $lte: cutoff },
+      $or: [
+        { paymentDeadline: { $lte: now } },
+        { createdAt: { $lte: cutoff } },
+      ],
     }).select('_id');
 
     let expiredCount = 0;
 
     for (const candidate of candidates) {
-      const expiredOrder = await Order.findOneAndUpdate(
-        {
-          _id: candidate._id,
-          paymentMethod: 'vnpay',
-          status: 'pending',
-          paymentStatus: 'pending',
-        },
-        {
-          $set: { status: 'cancelled', paymentStatus: 'failed' },
-          $push: {
-            statusHistory: {
-              status: 'cancelled',
-              timestamp: new Date(),
-              note: 'Order automatically cancelled after VNPAY payment reservation expired.',
+      const expiredOrder = await withTransaction(async (session) => {
+        const findOpts = session ? { session } : undefined;
+        const atomicExpired = await Order.findOneAndUpdate(
+          {
+            _id: candidate._id,
+            paymentMethod: 'vnpay',
+            status: 'pending',
+            paymentStatus: 'pending',
+          },
+          {
+            $set: { status: 'cancelled', paymentStatus: 'failed' },
+            $push: {
+              statusHistory: {
+                status: 'cancelled',
+                timestamp: new Date(),
+                note: 'Order automatically cancelled after VNPAY payment reservation expired.',
+              },
             },
           },
-        },
-        { returnDocument: 'after' }
-      );
+          { returnDocument: 'after', ...(findOpts || {}) }
+        );
+
+        if (!atomicExpired) return null;
+        await restockOrderAndReleaseCoupon(atomicExpired as any, session, true);
+        return atomicExpired;
+      });
 
       if (!expiredOrder) continue;
       expiredCount += 1;
-
-      for (const item of expiredOrder.items) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-      }
-      if (expiredOrder.couponCode) {
-        await Coupon.updateOne({ code: expiredOrder.couponCode, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
-      }
 
       const populated = await Order.findById(expiredOrder._id)
         .populate('userId', 'name email')
