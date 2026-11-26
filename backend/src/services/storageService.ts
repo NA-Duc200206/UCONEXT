@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { logger } from '../config/logger';
 
 export type ImageUploadKind = 'product' | 'avatar';
 
@@ -147,7 +148,7 @@ export const storageService = {
       await fs.unlink(diskPath);
     } catch (err: any) {
       if (err?.code !== 'ENOENT') {
-        console.error('Failed to delete local media file:', err?.message || err);
+        logger.error({ err }, 'Failed to delete local media file');
       }
     }
   },

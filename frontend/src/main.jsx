@@ -2,6 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './styles/index.css';
+import { initFrontendSentry } from './config/sentry.js';
+
+initFrontendSentry();
 
 const PRELOAD_RELOAD_KEY = 'uconext_vite_preload_reloaded_at';
 const PRELOAD_RELOAD_COOLDOWN_MS = 15_000;

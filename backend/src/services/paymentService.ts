@@ -7,6 +7,7 @@ import { emitOrderEvent, getIO } from '../config/socket';
 import { emailService } from './emailService';
 import { getVnpayConfig } from '../config/env';
 import { auditService } from './auditService';
+import { logger } from '../config/logger';
 
 const DEFAULT_PAYMENT_WINDOW_MS = 15 * 60 * 1000;
 const MIN_REMAINING_PAYMENT_WINDOW_MS = 2 * 60 * 1000;
@@ -39,7 +40,7 @@ async function logPaymentTransaction(entry: {
       verified: entry.verified,
     });
   } catch (err: any) {
-    console.error('Failed to log PaymentTransaction:', err?.message || err);
+    logger.error({ err }, 'Failed to log PaymentTransaction');
   }
 }
 

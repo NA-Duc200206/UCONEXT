@@ -15,6 +15,7 @@ import {
 import { productService } from './productService';
 import { cacheService } from '../utils/cache';
 import { redisClient } from '../config/redis';
+import { logger } from '../config/logger';
 import {
   callLLM,
   getLLMStatus,
@@ -1116,7 +1117,7 @@ export const aiService = {
           { upsert: true, new: true }
         );
       } catch (err) {
-        console.error('Failed to persist AI chat session:', err);
+        logger.error({ err }, 'Failed to persist AI chat session');
       }
     }
 
