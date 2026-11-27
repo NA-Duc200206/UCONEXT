@@ -95,7 +95,7 @@ jobs:
 
       - name: Build and push backend image
         if: inputs.image_tag == ''
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: backend/Dockerfile
@@ -106,7 +106,7 @@ jobs:
 
       - name: Build and push frontend image
         if: inputs.image_tag == ''
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: frontend/Dockerfile
