@@ -360,6 +360,7 @@ describe('Express HTTP routes, RBAC, CORS, domain endpoints, and upload security
       const rootRes = await fetch(`${spaUrl}/`);
       expect(rootRes.status).toBe(200);
       expect(rootRes.headers.get('cache-control')).toBe('no-cache');
+      expect(rootRes.headers.get('cross-origin-opener-policy')).toBe('same-origin-allow-popups');
       expect(await rootRes.text()).toContain('UCONEXT SPA');
 
       const deepRouteRes = await fetch(`${spaUrl}/products/some-item`);
