@@ -1,6 +1,13 @@
 # UCONEXT Platform (Multi-Product E-Commerce Store)
 
-> Nền tảng thương mại điện tử Full-Stack (E-Commerce) đa danh mục mang thương hiệu **UCONEXT**, tích hợp AI Shopping Concierge, quản trị toàn diện (Admin Portal), thanh toán COD & VNPAY, bộ nhớ đệm Redis, thông báo thời gian thực qua Socket.IO và đóng gói sẵn sàng cho Docker.
+> Nền tảng thương mại điện tử Full-Stack (E-Commerce) đa danh mục mang thương hiệu **UCONEXT**, tích hợp AI Shopping Concierge, quản trị toàn diện (Admin Portal), thanh toán COD & VNPAY, bộ nhớ đệm Redis, thông báo thời gian thực qua Socket.IO và đóng gói sẵn sàng cho Docker & Render.
+
+## Live Demo
+
+- **Storefront & API:** [https://uconext.onrender.com](https://uconext.onrender.com/)
+- **Health Check:** [https://uconext.onrender.com/api/health](https://uconext.onrender.com/api/health)
+
+> *Lưu ý: Bản demo đang chạy trên gói Render Free (tự ngủ sau 15 phút không có truy cập), nên lần mở đầu tiên có thể mất khoảng 30–50 giây để đánh thức server.*
 
 ---
 
@@ -28,10 +35,10 @@
 
 | Thành phần | Công nghệ |
 | :--- | :--- |
-| **Frontend** | React 18, Vite 6, React Router 6, TailwindCSS 4, Framer Motion, Recharts, Lucide, Firebase Auth, Socket.IO Client |
-| **Backend** | Node.js 22, Express, TypeScript, Mongoose 9 (MongoDB), Redis 6, Socket.IO, Nodemailer, Multer, Helmet, Firebase Admin |
+| **Frontend** | React 18, Vite 6, React Router 6, TailwindCSS 4, Framer Motion, Recharts, Lucide, Firebase Auth, Socket.IO Client, Sentry |
+| **Backend** | Node.js 22, Express, TypeScript, Mongoose 9 (MongoDB), Redis 6, Socket.IO, Nodemailer, Multer, Helmet, Pino, Sentry, Firebase Admin |
 | **Thanh toán & AI** | VNPAY Sandbox, COD, Multi-provider LLM (Gemini / OpenAI / Groq / OpenRouter / DeepSeek / Ollama) |
-| **Kiểm thử & CI/CD** | Vitest + `mongodb-memory-server` (Backend), Node `node:test` (Frontend), GitHub Actions, Docker & Nginx |
+| **Kiểm thử & CI/CD** | Vitest + V8 Coverage + `mongodb-memory-server` (Backend), Vitest + React Testing Library (Frontend), Playwright E2E, ESLint 9, Prettier, GitHub Actions, Docker, Nginx & Render Blueprint |
 | **Kiến trúc** | NPM Workspaces Monorepo (`backend` + `frontend`) |
 
 ---
@@ -42,31 +49,37 @@
 Multi-product store/
 ├── backend/                # Express TypeScript API Backend
 │   ├── src/
-│   │   ├── server.ts       # Khởi tạo Express app, HTTP + Socket.IO server & background jobs
-│   │   ├── config/         # Env fail-closed, MongoDB, Redis, Security, Socket.IO, Seed data
+│   │   ├── app.ts          # Factory khởi tạo Express app (API, health probes & optional SPA hosting)
+│   │   ├── server.ts       # HTTP + Socket.IO server & background jobs (Redis lock + email queue)
+│   │   ├── config/         # Env fail-closed, MongoDB, Redis, Pino, Sentry, Security, Socket.IO, Seed
+│   │   ├── jobs/           # Distributed lock scheduler & retryable email queue
 │   │   ├── scripts/        # CLI scripts (vd: seed.ts)
 │   │   ├── controllers/    # HTTP request/response handlers
-│   │   ├── middleware/     # JWT auth, RBAC, error handler
+│   │   ├── middleware/     # JWT auth, RBAC, Zod validation, rate limits, error handler
 │   │   ├── models/         # Mongoose Schemas & Indexes
 │   │   ├── routes/         # REST API & Multer upload routes
 │   │   └── services/       # Nghiệp vụ: Auth, Order, Payment, Product, Cache, AI, Audit
-│   ├── tests/              # Bộ test Vitest (unit + HTTP integration)
+│   ├── tests/              # Bộ test Vitest (unit + HTTP integration + V8 coverage)
 │   ├── Dockerfile          # Multi-stage Node 22 Alpine image
 │   └── .env.example        # Mẫu cấu hình biến môi trường
 ├── frontend/               # Ứng dụng React + Vite SPA
 │   ├── src/
 │   │   ├── components/     # UI dùng chung (Navbar, AdminNav, ErrorBoundary, AI Chat...)
 │   │   ├── context/        # Auth, Cart, Wishlist, Theme, Toast contexts
-│   │   ├── pages/          # Storefront & Admin Portal pages
+│   │   ├── pages/          # Storefront & Admin Portal pages (code-split với React.lazy)
 │   │   ├── services/       # API client & Socket.IO client
 │   │   ├── styles/         # UCONEXT Dual-Theme CSS tokens
-│   │   └── utils/          # Formatters & helpers
-│   ├── tests/              # Bộ test Frontend (Node built-in test runner)
+│   │   └── utils/          # Formatters, Firebase Auth & helpers
+│   ├── tests/              # Bộ test Vitest + React Testing Library
 │   ├── Dockerfile          # Multi-stage Vite build -> Nginx Alpine
 │   ├── nginx.conf          # SPA fallback + reverse proxy (/api, /uploads, /socket.io)
 │   └── .env.example        # Mẫu biến môi trường Firebase phía client
-├── .github/workflows/ci.yml# CI: Backend typecheck/build/test + Frontend build/test
+├── e2e/                    # Bộ kiểm thử End-to-End bằng Playwright
+├── .github/workflows/      # CI (lint, format, typecheck, coverage, E2E) & Deploy workflows
+├── Dockerfile.render       # Single-service Docker image (SPA + API) cho Render Free
+├── render.yaml             # Render Free Blueprint 1-click deploy
 ├── docker-compose.yml      # Stack đầy đủ: mongodb, redis, backend, frontend
+├── docs/                   # Hướng dẫn deploy miễn phí (FREE_DEMO_DEPLOY.md) & runbooks
 ├── doc/                    # Tài liệu kiến trúc chi tiết
 └── package.json            # NPM Workspaces root scripts
 ```
@@ -151,7 +164,10 @@ npm run dev:frontend
 ## Kiểm Thử & Build
 
 ```bash
-# Chạy toàn bộ test (Backend Vitest + Frontend node:test)
+# Chạy toàn bộ quality gate (ESLint, Prettier, typecheck, backend coverage, frontend tests)
+npm run verify
+
+# Chạy toàn bộ unit/integration tests (Backend + Frontend Vitest)
 npm test
 
 # Type-check & build Backend (bao gồm type-check thư mục tests)
@@ -176,4 +192,5 @@ Chỉ ở môi trường `development` (không bao giờ được tạo ở `pro
 
 ## Tài Liệu Bổ Sung
 
-Xem thêm tài liệu kiến trúc phân lớp và thiết kế hệ thống tại [doc/README.md](./doc/README.md).
+- Hướng dẫn deploy demo miễn phí 0 VNĐ trên Render + MongoDB Atlas: [docs/FREE_DEMO_DEPLOY.md](./docs/FREE_DEMO_DEPLOY.md)
+- Tài liệu kiến trúc phân lớp và thiết kế hệ thống: [doc/README.md](./doc/README.md)
