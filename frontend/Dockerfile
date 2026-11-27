@@ -28,7 +28,7 @@ ENV VITE_SENTRY_ENVIRONMENT=$VITE_SENTRY_ENVIRONMENT
 RUN npm run build:frontend
 
 # ---- Stage 2: Serve static bundle via unprivileged Nginx ----
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runner
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runner
 
 COPY frontend/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
