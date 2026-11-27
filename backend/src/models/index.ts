@@ -3,6 +3,8 @@ export * from './Category';
 export * from './Product';
 export * from './Order';
 export * from './Coupon';
+export * from './CouponRedemption';
+export * from './PaymentTransaction';
 export * from './AuditLog';
 export * from './Review';
 export * from './AIChatSession';

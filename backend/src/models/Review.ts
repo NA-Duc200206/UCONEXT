@@ -22,6 +22,7 @@ const ReviewSchema = new Schema<IReview>({
 
 // Avoid duplicate reviews from same user on same product
 ReviewSchema.index({ productId: 1, userId: 1 }, { unique: true });
+ReviewSchema.index({ productId: 1, isDeleted: 1, createdAt: -1 });
 
 export const Review = model<IReview>('Review', ReviewSchema);
 

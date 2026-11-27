@@ -1,0 +1,53 @@
+# Render Free Blueprint — 0-VND single-service demo deployment (Frontend SPA + API + Socket.IO)
+# Connect this repository on https://dashboard.render.com/blueprints to deploy in one click.
+# See docs/FREE_DEMO_DEPLOY.md for free MongoDB Atlas M0, Upstash Redis, and SMTP setup steps.
+
+services:
+  - type: web
+    name: uconext-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_FRONTEND_DIST
+        value: "true"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: PAYMENTS_VNPAY_ENABLED
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: google/gemini-2.0-flash-exp:free
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: AUTO_SEED
+        value: "false"
+      - key: ALLOW_PROD_SEED
+        value: "false"

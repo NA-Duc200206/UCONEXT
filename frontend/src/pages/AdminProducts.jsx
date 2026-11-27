@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -70,19 +70,7 @@ const AdminProducts = () => {
     }
   };
 
-  useEffect(() => {
-    if (!isAdmin) {
-      showToast('Access denied.', 'error');
-      navigate('/');
-      return;
-    }
-    const timer = setTimeout(() => {
-      loadData();
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [isAdmin, page, searchQuery, categoryFilter]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [catRes, prodRes, statsRes] = await Promise.all([
@@ -114,7 +102,19 @@ const AdminProducts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, searchQuery, categoryFilter, showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      showToast('Access denied.', 'error');
+      navigate('/');
+      return;
+    }
+    const timer = setTimeout(() => {
+      loadData();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [isAdmin, loadData, navigate, showToast]);
 
   // Row selection handlers
   const handleSelectAll = (e) => {
@@ -344,8 +344,9 @@ const AdminProducts = () => {
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: '600' }}>
                     <th style={{ padding: '16px 12px', width: '40px' }}>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
+                        aria-label="Select all products"
                         onChange={handleSelectAll}
                         checked={selectedProductIds.length === products.length && products.length > 0}
                         style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
@@ -387,8 +388,9 @@ const AdminProducts = () => {
                         }}
                       >
                         <td style={{ padding: '14px 12px' }}>
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${prod.name}`}
                             checked={isSelected}
                             onChange={() => handleSelectProduct(prod.id)}
                             style={{ accentColor: 'var(--brand)', width: '16px', height: '16px', cursor: 'pointer' }}
@@ -518,10 +520,11 @@ const AdminProducts = () => {
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Product Name *</label>
-                <input 
-                  type="text" 
-                  name="name" 
+                <label htmlFor="admin-prod-name" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Product Name *</label>
+                <input
+                  id="admin-prod-name"
+                  type="text"
+                  name="name"
                   value={formData.name}
                   onChange={handleInputChange}
                   className="glass-input"
@@ -531,10 +534,11 @@ const AdminProducts = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Price (VND) *</label>
-                  <input 
-                    type="number" 
-                    name="price" 
+                  <label htmlFor="admin-prod-price" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Price (VND) *</label>
+                  <input
+                    id="admin-prod-price"
+                    type="number"
+                    name="price"
                     value={formData.price}
                     onChange={handleInputChange}
                     className="glass-input"
@@ -542,10 +546,11 @@ const AdminProducts = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Stock Quantity *</label>
-                  <input 
-                    type="number" 
-                    name="stock" 
+                  <label htmlFor="admin-prod-stock" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Stock Quantity *</label>
+                  <input
+                    id="admin-prod-stock"
+                    type="number"
+                    name="stock"
                     value={formData.stock}
                     onChange={handleInputChange}
                     className="glass-input"
@@ -555,9 +560,10 @@ const AdminProducts = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Category *</label>
-                <select 
-                  name="categoryId" 
+                <label htmlFor="admin-prod-category" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Category *</label>
+                <select
+                  id="admin-prod-category"
+                  name="categoryId"
                   value={formData.categoryId}
                   onChange={handleInputChange}
                   className="glass-input"
@@ -571,23 +577,24 @@ const AdminProducts = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Product Image</label>
+                <label htmlFor="admin-prod-image" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Product Image</label>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <input 
-                    type="text" 
-                    name="image" 
+                  <input
+                    id="admin-prod-image"
+                    type="text"
+                    name="image"
                     value={formData.image}
                     onChange={handleInputChange}
                     placeholder="https://example.com/image.jpg or upload below"
                     className="glass-input"
                     style={{ flex: 1 }}
                   />
-                  <label 
-                    className="btn btn-secondary" 
-                    style={{ 
-                      padding: '0 14px', 
-                      height: '42px', 
-                      fontSize: '12px', 
+                  <label
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '0 14px',
+                      height: '42px',
+                      fontSize: '12px',
                       cursor: uploadingImage ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -596,12 +603,12 @@ const AdminProducts = () => {
                     }}
                   >
                     {uploadingImage ? 'Uploading...' : 'Upload File'}
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleFileUpload} 
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
                       disabled={uploadingImage}
-                      style={{ display: 'none' }} 
+                      style={{ display: 'none' }}
                     />
                   </label>
                 </div>
@@ -615,10 +622,11 @@ const AdminProducts = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Color Options (comma separated)</label>
-                  <input 
-                    type="text" 
-                    name="colorsInput" 
+                  <label htmlFor="admin-prod-colors" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Color Options (comma separated)</label>
+                  <input
+                    id="admin-prod-colors"
+                    type="text"
+                    name="colorsInput"
                     value={formData.colorsInput}
                     onChange={handleInputChange}
                     placeholder="e.g. Pink, Red, White"
@@ -626,10 +634,11 @@ const AdminProducts = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Size Options (comma separated)</label>
-                  <input 
-                    type="text" 
-                    name="sizesInput" 
+                  <label htmlFor="admin-prod-sizes" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Size Options (comma separated)</label>
+                  <input
+                    id="admin-prod-sizes"
+                    type="text"
+                    name="sizesInput"
                     value={formData.sizesInput}
                     onChange={handleInputChange}
                     placeholder="e.g. S, M, L or 50ml, 100ml"
@@ -639,9 +648,10 @@ const AdminProducts = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Detailed Description</label>
-                <textarea 
-                  name="description" 
+                <label htmlFor="admin-prod-desc" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>Detailed Description</label>
+                <textarea
+                  id="admin-prod-desc"
+                  name="description"
                   value={formData.description}
                   onChange={handleInputChange}
                   className="glass-input"

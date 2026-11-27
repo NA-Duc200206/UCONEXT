@@ -36,14 +36,14 @@ export const productService = {
       inStock,
       minRating,
       page = '1',
-      limit = '9',
+      limit = '24',
       sort,
     } = params || {};
 
     const parsedPage = parseInt(page.toString(), 10);
     const parsedLimit = parseInt(limit.toString(), 10);
     const pageNum = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
-    const limitNum = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 1200) : 9;
+    const limitNum = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? Math.min(parsedLimit, 100) : 24;
     const parsedMinRating = minRating !== undefined ? parseFloat(String(minRating)) : 0;
     const requireInStock = inStock === true || inStock === 'true' || inStock === '1';
     const normalizedSort = String(sort || '').trim().toLowerCase();
@@ -421,6 +421,18 @@ export const productService = {
 
   async getRecommended(userDoc: any | undefined, limitInput: number = 8) {
     const limit = Math.min(Math.max(Math.floor(Number(limitInput)) || 8, 1), 48);
+    const guestCacheKey = !userDoc ? `cache:products:recommended:guest:${limit}` : null;
+
+    if (guestCacheKey) {
+      const cached = await cacheService.get<{
+        products: any[];
+        personalized: boolean;
+        matchedCategories: string[];
+      }>(guestCacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
 
     const [inStockCandidates, reviewStats] = await Promise.all([
       Product.find({ isDeleted: { $ne: true }, stock: { $gt: 0 } })
@@ -657,10 +669,16 @@ export const productService = {
       reviewCount: ratingInfo?.reviewCount || 0
     }));
 
-    return {
+    const payload = {
       products: formatted,
       personalized,
       matchedCategories
     };
+
+    if (guestCacheKey) {
+      await cacheService.set(guestCacheKey, payload, 300);
+    }
+
+    return payload;
   }
 };

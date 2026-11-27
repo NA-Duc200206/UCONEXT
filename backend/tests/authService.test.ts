@@ -122,6 +122,7 @@ describe('authService', () => {
     expect(capturedResetUrl).toBe('');
 
     await authService.forgotPassword('alice@uconext.test');
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(capturedResetUrl).toContain('/reset-password?token=');
     const rawToken = new URL(capturedResetUrl).searchParams.get('token')!;
     expect(rawToken).toBeTruthy();
@@ -142,7 +143,7 @@ describe('authService', () => {
   it('prevents Firebase login from hijacking an existing account when email_verified is false', async () => {
     await authService.register('Victim Admin', 'victim@uconext.test', 'StrongPass1', '127.0.0.1');
 
-    process.env.FIREBASE_PROJECT_ID = 'uconext-test-project';
+    vi.stubEnv('FIREBASE_PROJECT_ID', 'uconext-test-project');
     mockVerifyIdToken.mockResolvedValueOnce({
       uid: 'attacker-firebase-uid',
       email: 'victim@uconext.test',
@@ -150,9 +151,13 @@ describe('authService', () => {
       firebase: { sign_in_provider: 'password' },
     });
 
-    await expect(authService.loginWithFirebase('mock-unverified-token', '127.0.0.1')).rejects.toMatchObject({
-      statusCode: 403,
-    });
+    try {
+      await expect(authService.loginWithFirebase('mock-unverified-token', '127.0.0.1')).rejects.toMatchObject({
+        statusCode: 403,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

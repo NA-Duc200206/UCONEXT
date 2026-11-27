@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { AuditLog } from '../models';
+import { logger } from '../config/logger';
 
 export interface RecordAuditParams {
   userId?: string;
@@ -35,7 +36,7 @@ export const auditService = {
         ipAddress: ipAddress || '',
       });
     } catch (err) {
-      console.error('Failed to record audit log:', err);
+      logger.error({ err, action, targetType, targetId }, 'Failed to record audit log');
     }
   },
 

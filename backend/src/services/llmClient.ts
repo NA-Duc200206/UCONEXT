@@ -266,13 +266,21 @@ export function getLLMStatus(env: NodeJS.ProcessEnv = process.env): {
   }
 }
 
+export function redactSecretTokens(text: string): string {
+  return String(text || '')
+    .replace(/AIza[A-Za-z0-9_-]{10,}/g, '[REDACTED]')
+    .replace(/sk-or-[A-Za-z0-9_-]{8,}/g, '[REDACTED]')
+    .replace(/sk-[A-Za-z0-9_-]{10,}/g, '[REDACTED]')
+    .replace(/gsk_[A-Za-z0-9_-]{10,}/g, '[REDACTED]');
+}
+
 function buildHttpError(
   status: number,
   upstreamMsg: string,
   provider: LLMProviderName,
   model: string
 ): LLMError {
-  const cleanMsg = upstreamMsg.replace(/AIza[A-Za-z0-9_-]{10,}/g, '[REDACTED]').slice(0, 260);
+  const cleanMsg = redactSecretTokens(upstreamMsg).slice(0, 260);
   if (status === 401 || status === 403) {
     return new LLMError(
       `Authentication failed for ${provider} (${model}): ${cleanMsg || 'invalid API key or permissions.'}`,
@@ -324,7 +332,7 @@ async function callGemini(
   cfg: LLMResolvedConfig,
   params: LLMCallParams
 ): Promise<LLMCompletionResult> {
-  const endpoint = `${cfg.baseUrl}/models/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+  const endpoint = `${cfg.baseUrl}/models/${encodeURIComponent(cfg.model)}:generateContent`;
 
   const contents: any[] = [];
   for (let i = 0; i < params.messages.length; i++) {
@@ -407,7 +415,10 @@ async function callGemini(
   try {
     response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': cfg.apiKey,
+      },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(cfg.timeoutMs)
     });

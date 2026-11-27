@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { api } from '../services/api';
 import { subscribeToEvent } from '../services/socket';
 import { useToast } from '../context/ToastContext';
@@ -33,6 +33,18 @@ const AdminOrders = () => {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(1);
 
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.orders.getAll();
+      setOrders(res.orders || []);
+    } catch (err) {
+      showToast(err.message || 'Failed to load orders.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     if (!isAdmin) {
       showToast('Access denied.', 'error');
@@ -60,19 +72,7 @@ const AdminOrders = () => {
       unsubUpdated();
       unsubCancelled();
     };
-  }, [isAdmin]);
-
-  const loadOrders = async () => {
-    setLoading(true);
-    try {
-      const res = await api.orders.getAll();
-      setOrders(res.orders || []);
-    } catch (err) {
-      showToast(err.message || 'Failed to load orders.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isAdmin, loadOrders, navigate, showToast]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
@@ -277,6 +277,7 @@ const AdminOrders = () => {
           <option value="pending">Unpaid</option>
           <option value="paid">Paid</option>
           <option value="failed">Failed</option>
+          <option value="review">Needs Reconciliation (Review)</option>
         </select>
       </div>
 
@@ -325,6 +326,11 @@ const AdminOrders = () => {
                             }}
                           >
                             <Tag size={11} /> {order.couponCode}
+                          </span>
+                        )}
+                        {order.paymentStatus === 'review' && (
+                          <span className="badge badge-error" style={{ fontSize: '11px', fontWeight: 700 }}>
+                            Payment Reconciliation Required
                           </span>
                         )}
                       </div>
@@ -414,6 +420,7 @@ const AdminOrders = () => {
                               <option value="pending">Unpaid</option>
                               <option value="paid">Paid</option>
                               <option value="failed">Failed</option>
+                              <option value="review">Needs Review</option>
                             </select>
                           </div>
                           {order.discountAmount > 0 && (

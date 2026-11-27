@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
@@ -211,7 +211,7 @@ const ProductDetail = () => {
     };
   }, [product?._id, product?.id, user?._id, user?.id]);
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       const res = await api.reviews.getByProductId(id);
       setReviews(res.reviews || []);
@@ -220,13 +220,13 @@ const ProductDetail = () => {
     } catch (err) {
       console.error('Failed to load reviews:', err.message);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     if (id) {
       fetchReviews();
     }
-  }, [id]);
+  }, [id, fetchReviews]);
 
   // Unique gallery images (only show thumbnail strip if > 1 unique image)
   const galleryImages = useMemo(() => {
@@ -654,8 +654,8 @@ const ProductDetail = () => {
                   {user ? (
                     <form onSubmit={handleSubmitReview} className="pd-review-form">
                       <div>
-                        <label className="pd-form-label">Your Rating</label>
-                        <div className="pd-star-picker">
+                        <span className="pd-form-label" id="pd-rating-label">Your Rating</span>
+                        <div className="pd-star-picker" role="group" aria-labelledby="pd-rating-label">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
                               type="button"
@@ -676,8 +676,9 @@ const ProductDetail = () => {
                       </div>
 
                       <div>
-                        <label className="pd-form-label">Your Feedback</label>
+                        <label htmlFor="pd-review-comment" className="pd-form-label">Your Feedback</label>
                         <textarea
+                          id="pd-review-comment"
                           rows={3}
                           value={reviewComment}
                           onChange={(e) => setReviewComment(e.target.value)}

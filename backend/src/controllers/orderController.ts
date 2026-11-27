@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { orderService } from '../services/orderService';
+import { sendSafeError } from '../middleware/errorHandler';
 
 export const orderController = {
   async create(req: any, res: Response) {
@@ -10,10 +11,7 @@ export const orderController = {
         order
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to place order.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -22,10 +20,7 @@ export const orderController = {
       const orders = await orderService.getMyOrders(req.user._id);
       return res.status(200).json({ orders });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve order history.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -35,10 +30,7 @@ export const orderController = {
       const order = await orderService.getOrderById(id, req.user._id, req.user.role);
       return res.status(200).json({ order });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve order details.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -47,10 +39,7 @@ export const orderController = {
       const orders = await orderService.getAllOrders();
       return res.status(200).json({ orders });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve all orders.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -70,10 +59,7 @@ export const orderController = {
         order
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to update order status.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -86,10 +72,7 @@ export const orderController = {
         order
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to cancel order.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -103,10 +86,7 @@ export const orderController = {
         order
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to submit refund request.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   }
 };

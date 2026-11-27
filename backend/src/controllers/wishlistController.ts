@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { wishlistService } from '../services/wishlistService';
+import { sendSafeError } from '../middleware/errorHandler';
 
 export const wishlistController = {
   async getWishlist(req: any, res: Response) {
@@ -7,10 +8,7 @@ export const wishlistController = {
       const wishlist = await wishlistService.getWishlist(req.user._id);
       return res.status(200).json({ wishlist });
     } catch (error: any) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || 'Failed to retrieve wishlist.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -23,10 +21,7 @@ export const wishlistController = {
         ...result
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to update wishlist.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   },
 
@@ -39,11 +34,7 @@ export const wishlistController = {
         ...result
       });
     } catch (error: any) {
-      return res.status(error.statusCode || 400).json({
-        message: error.message || 'Failed to remove from wishlist.',
-        error: error.message
-      });
+      return sendSafeError(res, error, 500);
     }
   }
 };
-

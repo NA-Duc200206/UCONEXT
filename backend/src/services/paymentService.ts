@@ -1,9 +1,16 @@
 import crypto from 'crypto';
 import qs from 'qs';
 import { Types } from 'mongoose';
-import { Order, Product, Coupon } from '../models';
-import { emitOrderEvent } from '../config/socket';
+import { Order, Product, Coupon, CouponRedemption, PaymentTransaction } from '../models';
+import { withTransaction } from '../config/db';
+import { emitOrderEvent, getIO } from '../config/socket';
 import { emailService } from './emailService';
+import { getVnpayConfig } from '../config/env';
+import { auditService } from './auditService';
+import { logger } from '../config/logger';
+
+const DEFAULT_PAYMENT_WINDOW_MS = 15 * 60 * 1000;
+const MIN_REMAINING_PAYMENT_WINDOW_MS = 2 * 60 * 1000;
 
 function createPaymentError(message: string, statusCode = 400) {
   const error: any = new Error(message);
@@ -11,39 +18,74 @@ function createPaymentError(message: string, statusCode = 400) {
   return error;
 }
 
+async function logPaymentTransaction(entry: {
+  orderId?: any;
+  txnRef: string;
+  source: 'ipn' | 'return';
+  rawQuery: Record<string, any>;
+  rspCode: string;
+  transactionStatus?: string;
+  amount?: number;
+  verified: boolean;
+}) {
+  try {
+    await PaymentTransaction.create({
+      orderId: entry.orderId && Types.ObjectId.isValid(String(entry.orderId)) ? entry.orderId : undefined,
+      txnRef: entry.txnRef || 'unknown',
+      source: entry.source,
+      rawQuery: entry.rawQuery || {},
+      rspCode: entry.rspCode || '',
+      transactionStatus: entry.transactionStatus,
+      amount: Number.isFinite(entry.amount) ? entry.amount : undefined,
+      verified: entry.verified,
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to log PaymentTransaction');
+  }
+}
+
 async function cancelAndRestockPendingVnpayOrder(orderId: any, txnRef: string, note: string): Promise<boolean> {
-  const cancelledOrder = await Order.findOneAndUpdate(
-    {
-      _id: orderId,
-      status: 'pending',
-      paymentStatus: { $ne: 'paid' },
-      vnpayTxnRef: txnRef,
-    },
-    {
-      $set: {
-        paymentStatus: 'failed',
-        status: 'cancelled',
+  const cancelledOrder = await withTransaction(async (session) => {
+    const findOpts = session ? { session } : undefined;
+    const atomic = await Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        status: 'pending',
+        paymentStatus: { $nin: ['paid', 'review'] },
+        vnpayTxnRef: txnRef,
       },
-      $push: {
-        statusHistory: { status: 'cancelled', timestamp: new Date(), note },
+      {
+        $set: {
+          paymentStatus: 'failed',
+          status: 'cancelled',
+        },
+        $push: {
+          statusHistory: { status: 'cancelled', timestamp: new Date(), note },
+        },
       },
-    },
-    { returnDocument: 'after' }
-  );
+      { returnDocument: 'after', ...(findOpts || {}) }
+    );
+
+    if (!atomic) return null;
+
+    for (const item of atomic.items) {
+      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } }, findOpts);
+    }
+
+    if (atomic.couponCode) {
+      await Coupon.updateOne(
+        { code: atomic.couponCode, usedCount: { $gt: 0 } },
+        { $inc: { usedCount: -1 } },
+        findOpts
+      );
+      await CouponRedemption.deleteMany({ orderId: atomic._id }, findOpts);
+    }
+
+    return atomic;
+  });
 
   if (!cancelledOrder) {
     return false;
-  }
-
-  for (const item of cancelledOrder.items) {
-    await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-  }
-
-  if (cancelledOrder.couponCode) {
-    await Coupon.updateOne(
-      { code: cancelledOrder.couponCode, usedCount: { $gt: 0 } },
-      { $inc: { usedCount: -1 } }
-    );
   }
 
   const populated = await Order.findById(cancelledOrder._id)
@@ -60,7 +102,7 @@ async function confirmPaidVnpayOrder(orderId: any, txnRef: string, note: string)
     {
       _id: orderId,
       status: 'pending',
-      paymentStatus: { $ne: 'paid' },
+      paymentStatus: { $nin: ['paid', 'review'] },
       vnpayTxnRef: txnRef,
     },
     {
@@ -90,6 +132,62 @@ async function confirmPaidVnpayOrder(orderId: any, txnRef: string, note: string)
   }
 
   return confirmedOrder;
+}
+
+async function flagPaidAfterExpiryForReview(
+  orderId: any,
+  txnRef: string,
+  amount: number,
+  source: 'ipn' | 'return'
+) {
+  const flaggedOrder = await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      status: 'cancelled',
+      paymentStatus: { $nin: ['paid', 'review'] },
+      vnpayTxnRef: txnRef,
+    },
+    {
+      $set: {
+        paymentStatus: 'review',
+      },
+      $push: {
+        statusHistory: {
+          status: 'cancelled',
+          timestamp: new Date(),
+          note: `Late VNPAY payment received via ${source.toUpperCase()} after order cancellation — flagged for admin reconciliation.`,
+        },
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  if (!flaggedOrder) {
+    return null;
+  }
+
+  await auditService.record({
+    userId: String(flaggedOrder.userId),
+    action: 'VNPAY_PAID_AFTER_EXPIRY',
+    targetType: 'Order',
+    targetId: String(flaggedOrder._id),
+    oldValue: { status: 'cancelled', paymentStatus: 'failed' },
+    newValue: { status: 'cancelled', paymentStatus: 'review', txnRef, amount, source },
+  });
+
+  const populated = await Order.findById(flaggedOrder._id)
+    .populate('userId', 'name email')
+    .populate('items.productId', 'name image');
+  const obj = populated ? (populated as any).toObject() : flaggedOrder.toObject();
+  const payload = { ...obj, id: obj._id };
+
+  const io = getIO();
+  if (io) {
+    io.to('role:admin').emit('order:payment_review', payload);
+  }
+  emitOrderEvent('order:updated', payload);
+
+  return flaggedOrder;
 }
 
 function sortObject(obj: Record<string, any>) {
@@ -143,12 +241,24 @@ function normalizeClientIp(rawIp: string | string[] | undefined): string {
 }
 
 export const paymentService = {
+  getAvailableMethods() {
+    return {
+      cod: true,
+      vnpay: Boolean(getVnpayConfig()),
+    };
+  },
+
   async createPaymentUrl(
     orderId: string,
     ipAddr: string | string[],
     requesterId?: string,
     requesterRole?: string
   ) {
+    const vnpayConfig = getVnpayConfig();
+    if (!vnpayConfig) {
+      throw createPaymentError('VNPAY payment gateway is currently unavailable.', 503);
+    }
+
     if (!Types.ObjectId.isValid(orderId)) {
       throw createPaymentError('Order does not exist.', 404);
     }
@@ -178,17 +288,29 @@ export const paymentService = {
       throw createPaymentError(`Cannot initiate payment for an order in "${order.status}" status.`, 400);
     }
 
-    const tmnCode = process.env.VNPAY_TMN_CODE || 'mock_tmn_code';
-    const secretKey = process.env.VNPAY_HASH_SECRET || 'mock_hash_secret';
-    const vnpUrl = process.env.VNPAY_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-    const returnUrl = process.env.VNPAY_RETURN_URL || 'http://localhost:3000/payment-result';
-
     const now = new Date();
+    const orderDeadline =
+      order.paymentDeadline || new Date(order.createdAt.getTime() + DEFAULT_PAYMENT_WINDOW_MS);
+    const remainingMs = orderDeadline.getTime() - now.getTime();
+    if (remainingMs < MIN_REMAINING_PAYMENT_WINDOW_MS) {
+      throw createPaymentError(
+        'Payment window has nearly expired. Please place a new order.',
+        400
+      );
+    }
+
+    const { tmnCode, hashSecret: secretKey, url: vnpUrl, returnUrl } = vnpayConfig;
+
     const createDate = getVnpayDateFormat(now);
-    const expireDate = getVnpayDateFormat(new Date(now.getTime() + 15 * 60 * 1000));
-    const txnRef = `${order._id}-${now.getTime()}`;
+    const effectiveExpireMs = Math.min(now.getTime() + DEFAULT_PAYMENT_WINDOW_MS, orderDeadline.getTime());
+    const expireDate = getVnpayDateFormat(new Date(effectiveExpireMs));
+    const uniqueSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+    const txnRef = `${order._id}-${uniqueSuffix}`;
 
     order.vnpayTxnRef = txnRef;
+    if (!order.paymentDeadline) {
+      order.paymentDeadline = orderDeadline;
+    }
     await order.save();
 
     const amount = Math.round(order.totalAmount * 100);
@@ -220,7 +342,13 @@ export const paymentService = {
   },
 
   async verifyPayment(queryParams: any) {
-    let vnp_Params: Record<string, any> = { ...(queryParams || {}) };
+    const vnpayConfig = getVnpayConfig();
+    if (!vnpayConfig) {
+      throw createPaymentError('VNPAY payment gateway is currently unavailable.', 503);
+    }
+
+    const rawQuery: Record<string, any> = { ...(queryParams || {}) };
+    let vnp_Params: Record<string, any> = { ...rawQuery };
     const secureHash = vnp_Params['vnp_SecureHash'];
 
     delete vnp_Params['vnp_SecureHash'];
@@ -228,19 +356,38 @@ export const paymentService = {
 
     const rawTxnRef = typeof vnp_Params['vnp_TxnRef'] === 'string' ? vnp_Params['vnp_TxnRef'] : '';
     const rawResponseCode = typeof vnp_Params['vnp_ResponseCode'] === 'string' ? vnp_Params['vnp_ResponseCode'] : '';
+    const rawTransactionStatus =
+      typeof vnp_Params['vnp_TransactionStatus'] === 'string' ? vnp_Params['vnp_TransactionStatus'] : '';
+    const rawTmnCode = typeof vnp_Params['vnp_TmnCode'] === 'string' ? vnp_Params['vnp_TmnCode'] : '';
     const rawAmount = vnp_Params['vnp_Amount'];
+    const orderId = rawTxnRef.split('-')[0] || '';
 
     vnp_Params = sortObject(vnp_Params);
 
-    const secretKey = process.env.VNPAY_HASH_SECRET || 'mock_hash_secret';
+    const { tmnCode: expectedTmnCode, hashSecret: secretKey } = vnpayConfig;
     const signData = qs.stringify(vnp_Params, { encode: false });
     const checkHash = generateHmacSha512(secretKey, signData);
+    const hashValid = verifySecureHash(secureHash, checkHash);
 
-    if (!verifySecureHash(secureHash, checkHash)) {
+    await logPaymentTransaction({
+      orderId,
+      txnRef: rawTxnRef,
+      source: 'return',
+      rawQuery,
+      rspCode: rawResponseCode,
+      transactionStatus: rawTransactionStatus,
+      amount: Number(rawAmount),
+      verified: hashValid,
+    });
+
+    if (!hashValid) {
       throw createPaymentError('Checksum verification failed.', 400);
     }
 
-    const orderId = rawTxnRef.split('-')[0] || '';
+    if (!rawTmnCode || rawTmnCode !== expectedTmnCode) {
+      throw createPaymentError('Merchant terminal code mismatch.', 400);
+    }
+
     if (!Types.ObjectId.isValid(orderId)) {
       throw createPaymentError('Corresponding order not found.', 404);
     }
@@ -256,9 +403,11 @@ export const paymentService = {
       throw createPaymentError('Payment amount does not match order total.', 400);
     }
 
+    const isSuccessfulPayment = rawResponseCode === '00' && rawTransactionStatus === '00';
+
     // Idempotent handling when order is already paid (e.g. IPN arrived before Return URL)
     if (order.paymentStatus === 'paid') {
-      if (rawResponseCode === '00' && order.vnpayTxnRef === rawTxnRef) {
+      if (isSuccessfulPayment && order.vnpayTxnRef === rawTxnRef) {
         return { success: true, orderId: order._id, message: 'Payment completed successfully.' };
       }
       throw createPaymentError('Order has already been paid; stale transaction callback rejected.', 400);
@@ -268,7 +417,17 @@ export const paymentService = {
       throw createPaymentError('Invalid or superseded payment transaction reference.', 400);
     }
 
-    if (rawResponseCode === '00') {
+    if (isSuccessfulPayment) {
+      if (order.status === 'cancelled') {
+        await flagPaidAfterExpiryForReview(order._id, rawTxnRef, callbackAmount, 'return');
+        return {
+          success: false,
+          needsReview: true,
+          orderId: order._id,
+          message: 'Payment was received after order expiry and has been flagged for reconciliation.',
+        };
+      }
+
       const updated = await confirmPaidVnpayOrder(
         order._id,
         rawTxnRef,
@@ -287,13 +446,19 @@ export const paymentService = {
     await cancelAndRestockPendingVnpayOrder(
       order._id,
       rawTxnRef,
-      `Payment failed (VNPAY code: ${rawResponseCode || 'unknown'}).`
+      `Payment failed (VNPAY code: ${rawResponseCode || 'unknown'}, txnStatus: ${rawTransactionStatus || 'unknown'}).`
     );
     return { success: false, orderId: order._id, message: 'Payment failed.' };
   },
 
   async handleIpn(queryParams: any) {
-    let vnp_Params: Record<string, any> = { ...(queryParams || {}) };
+    const vnpayConfig = getVnpayConfig();
+    if (!vnpayConfig) {
+      return { RspCode: '99', Message: 'Payment gateway disabled' };
+    }
+
+    const rawQuery: Record<string, any> = { ...(queryParams || {}) };
+    let vnp_Params: Record<string, any> = { ...rawQuery };
     const secureHash = vnp_Params['vnp_SecureHash'];
 
     delete vnp_Params['vnp_SecureHash'];
@@ -301,19 +466,38 @@ export const paymentService = {
 
     const rawTxnRef = typeof vnp_Params['vnp_TxnRef'] === 'string' ? vnp_Params['vnp_TxnRef'] : '';
     const rawResponseCode = typeof vnp_Params['vnp_ResponseCode'] === 'string' ? vnp_Params['vnp_ResponseCode'] : '';
+    const rawTransactionStatus =
+      typeof vnp_Params['vnp_TransactionStatus'] === 'string' ? vnp_Params['vnp_TransactionStatus'] : '';
+    const rawTmnCode = typeof vnp_Params['vnp_TmnCode'] === 'string' ? vnp_Params['vnp_TmnCode'] : '';
     const rawAmount = vnp_Params['vnp_Amount'];
+    const orderId = rawTxnRef.split('-')[0] || '';
 
     vnp_Params = sortObject(vnp_Params);
 
-    const secretKey = process.env.VNPAY_HASH_SECRET || 'mock_hash_secret';
+    const { tmnCode: expectedTmnCode, hashSecret: secretKey } = vnpayConfig;
     const signData = qs.stringify(vnp_Params, { encode: false });
     const checkHash = generateHmacSha512(secretKey, signData);
+    const hashValid = verifySecureHash(secureHash, checkHash);
 
-    if (!verifySecureHash(secureHash, checkHash)) {
+    await logPaymentTransaction({
+      orderId,
+      txnRef: rawTxnRef,
+      source: 'ipn',
+      rawQuery,
+      rspCode: rawResponseCode,
+      transactionStatus: rawTransactionStatus,
+      amount: Number(rawAmount),
+      verified: hashValid,
+    });
+
+    if (!hashValid) {
       return { RspCode: '97', Message: 'Checksum failed' };
     }
 
-    const orderId = rawTxnRef.split('-')[0] || '';
+    if (!rawTmnCode || rawTmnCode !== expectedTmnCode) {
+      return { RspCode: '97', Message: 'Invalid TmnCode' };
+    }
+
     if (!Types.ObjectId.isValid(orderId)) {
       return { RspCode: '01', Message: 'Order not found' };
     }
@@ -329,7 +513,7 @@ export const paymentService = {
       return { RspCode: '04', Message: 'Amount invalid' };
     }
 
-    if (order.paymentStatus === 'paid') {
+    if (order.paymentStatus === 'paid' || order.paymentStatus === 'review') {
       return { RspCode: '02', Message: 'Order already confirmed' };
     }
 
@@ -337,7 +521,14 @@ export const paymentService = {
       return { RspCode: '01', Message: 'Transaction reference mismatch' };
     }
 
-    if (rawResponseCode === '00') {
+    const isSuccessfulPayment = rawResponseCode === '00' && rawTransactionStatus === '00';
+
+    if (isSuccessfulPayment) {
+      if (order.status === 'cancelled') {
+        await flagPaidAfterExpiryForReview(order._id, rawTxnRef, callbackAmount, 'ipn');
+        return { RspCode: '00', Message: 'Confirm Success' };
+      }
+
       const updated = await confirmPaidVnpayOrder(
         order._id,
         rawTxnRef,
@@ -350,7 +541,7 @@ export const paymentService = {
       await cancelAndRestockPendingVnpayOrder(
         order._id,
         rawTxnRef,
-        `Payment failed via IPN callback (code: ${rawResponseCode || 'unknown'}).`
+        `Payment failed via IPN callback (code: ${rawResponseCode || 'unknown'}, txnStatus: ${rawTransactionStatus || 'unknown'}).`
       );
     }
 

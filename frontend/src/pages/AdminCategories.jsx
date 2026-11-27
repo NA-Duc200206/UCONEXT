@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FolderTree, Plus, Pencil, Trash2, Search, X, Package } from 'lucide-react';
 import { api } from '../services/api';
@@ -21,25 +21,7 @@ const AdminCategories = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '' });
 
-  useEffect(() => {
-    if (!isAdmin) {
-      showToast('Access denied.', 'error');
-      navigate('/');
-      return;
-    }
-    loadCategories();
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (!modalOpen) return;
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') setModalOpen(false);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [modalOpen]);
-
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.categories.getAll();
@@ -49,7 +31,25 @@ const AdminCategories = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      showToast('Access denied.', 'error');
+      navigate('/');
+      return;
+    }
+    loadCategories();
+  }, [isAdmin, loadCategories, navigate, showToast]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setModalOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [modalOpen]);
 
   const openCreateModal = () => {
     setModalMode('create');

@@ -53,3 +53,13 @@ backend/public/uploads/*
 
 # .agent
 .agents/
+
+# Test & coverage outputs
+coverage/
+playwright-report/
+test-results/
+
+# Test & coverage outputs
+coverage/
+playwright-report/
+test-results/

@@ -50,6 +50,9 @@ describe('security & production config', () => {
       JWT_REFRESH_SECRET: 'your_jwt_refresh_secret_key_here',
       VNPAY_HASH_SECRET: 'HJGBUYTREWQLKJHGFDSAZXCVBNMKIOP',
       CLIENT_URL: 'https://uconext.com',
+      SMTP_HOST: 'smtp.uconext.com',
+      SMTP_USER: 'no-reply@uconext.com',
+      SMTP_PASS: 'strong-smtp-pass-2026',
     });
     expect(placeholderSecret).toHaveLength(2);
 
@@ -59,8 +62,30 @@ describe('security & production config', () => {
       JWT_SECRET: 'a_very_strong_random_production_secret_key_2026',
       JWT_REFRESH_SECRET: 'another_strong_random_refresh_secret_key_2026',
       CLIENT_URL: 'https://uconext.com',
+      SMTP_HOST: 'smtp.uconext.com',
+      SMTP_USER: 'no-reply@uconext.com',
+      SMTP_PASS: 'strong-smtp-pass-2026',
     });
     expect(valid).toEqual([]);
+
+    // Render Free Blueprint auto-injects RENDER_EXTERNAL_URL without requiring CLIENT_URL beforehand
+    const renderOrigins = parseAllowedOrigins({
+      NODE_ENV: 'production',
+      RENDER_EXTERNAL_URL: 'https://uconext-demo.onrender.com/',
+    });
+    expect(renderOrigins).toEqual(['https://uconext-demo.onrender.com']);
+
+    const validOnRender = validateProductionEnv({
+      NODE_ENV: 'production',
+      MONGODB_URI: 'mongodb+srv://cluster.example/uconext',
+      JWT_SECRET: 'a_very_strong_random_production_secret_key_2026',
+      JWT_REFRESH_SECRET: 'another_strong_random_refresh_secret_key_2026',
+      RENDER_EXTERNAL_URL: 'https://uconext-demo.onrender.com',
+      SMTP_HOST: 'smtp.uconext.com',
+      SMTP_USER: 'no-reply@uconext.com',
+      SMTP_PASS: 'strong-smtp-pass-2026',
+    });
+    expect(validOnRender).toEqual([]);
   });
 });
 

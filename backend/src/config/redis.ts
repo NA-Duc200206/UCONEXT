@@ -1,4 +1,5 @@
 import { createClient } from 'redis';
+import { logger } from './logger';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 export const redisClient = createClient({
@@ -6,23 +7,23 @@ export const redisClient = createClient({
   socket: {
     connectTimeout: 2000,
     reconnectStrategy: (retries) => {
-      // Limit retries to 3 so it doesn't hang the startup sequence
-      if (retries > 2) return false;
-      return 500;
-    }
-  }
+      const maxRetries = process.env.NODE_ENV === 'production' ? 5 : 2;
+      if (retries > maxRetries) return false;
+      return Math.min(retries * 200, 5000);
+    },
+  },
 });
 
-redisClient.on('error', (err) => {
-  // Silence warnings to avoid spamming the console
+redisClient.on('error', (_err) => {
+  // Silence repetitive reconnect noise during local fallback
 });
 
 export const connectRedis = async (): Promise<void> => {
   try {
-    console.log('⏳ Connecting to Redis...');
+    logger.info('Connecting to Redis');
     await redisClient.connect();
-    console.log('✔ Connected to Redis.');
-  } catch (err: any) {
-    console.warn('⚠️ Redis connection failed. Caching will be disabled/mocked.');
+    logger.info('Connected to Redis');
+  } catch (_err: any) {
+    logger.warn('Redis connection failed; caching and locks will use local fallback');
   }
 };

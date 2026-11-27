@@ -161,8 +161,10 @@ const Settings = () => {
     }
   }, [user]);
 
+  const currentUserId = user?._id || user?.id || null;
+
   useEffect(() => {
-    if (!user) return;
+    if (!currentUserId) return;
     let mounted = true;
     const loadPersonalData = async () => {
       setLoadingCategories(true);
@@ -198,7 +200,7 @@ const Settings = () => {
     return () => {
       mounted = false;
     };
-  }, [user?._id, user?.id]);
+  }, [currentUserId]);
 
   const handleConfirmClearRecent = async () => {
     setRecentFeedback(null);

@@ -8,7 +8,7 @@ function getFirebaseAuthInstance() {
 
   if (!apiKey || !authDomain || !projectId) {
     throw new Error(
-      'Firebase Authentication is not configured yet (missing VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, or VITE_FIREBASE_PROJECT_ID).'
+      'Google Sign-In is temporarily unavailable. Please sign in with your email and password.'
     );
   }
 
@@ -32,7 +32,20 @@ export async function signInWithGooglePopup() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  const result = await signInWithPopup(auth, provider);
-  return result.user.getIdToken();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user.getIdToken();
+  } catch (error) {
+    const code = error?.code || '';
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      throw new Error('Google Sign-In was cancelled. Please try again.');
+    }
+    if (code === 'auth/unauthorized-domain') {
+      throw new Error(
+        'Google Sign-In is not enabled for this domain yet. Please sign in with email and password.'
+      );
+    }
+    throw new Error('Google Sign-In failed. Please try again or use email and password.');
+  }
 }
 

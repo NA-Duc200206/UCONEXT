@@ -1,16 +1,22 @@
 import mongoose from 'mongoose';
 import { User, Product } from '../models';
 
+function createWishlistError(message: string, statusCode: number): Error & { statusCode: number } {
+  const error = new Error(message) as Error & { statusCode: number };
+  error.statusCode = statusCode;
+  return error;
+}
+
 export const wishlistService = {
   async getWishlist(userId: string) {
     const user = await User.findById(userId).populate({
       path: 'wishlist',
       match: { isDeleted: { $ne: true } },
-      populate: { path: 'categoryId', select: 'name slug' }
+      populate: { path: 'categoryId', select: 'name slug' },
     });
 
     if (!user) {
-      throw { statusCode: 404, message: 'User not found.' };
+      throw createWishlistError('User not found.', 404);
     }
 
     return (user.wishlist || []).filter(Boolean);
@@ -18,17 +24,17 @@ export const wishlistService = {
 
   async toggleWishlist(userId: string, productId: string) {
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      throw { statusCode: 400, message: 'Invalid product ID.' };
+      throw createWishlistError('Invalid product ID.', 400);
     }
 
     const product = await Product.findOne({ _id: productId, isDeleted: { $ne: true } });
     if (!product) {
-      throw { statusCode: 404, message: 'Product not found.' };
+      throw createWishlistError('Product not found.', 404);
     }
 
     const user = await User.findById(userId).select('wishlist');
     if (!user) {
-      throw { statusCode: 404, message: 'User not found.' };
+      throw createWishlistError('User not found.', 404);
     }
 
     const exists = (user.wishlist || []).some((id) => String(id) === String(productId));
@@ -42,20 +48,20 @@ export const wishlistService = {
     const wishlist = await this.getWishlist(userId);
     return {
       wishlisted: !exists,
-      wishlist
+      wishlist,
     };
   },
 
   async removeFromWishlist(userId: string, productId: string) {
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      throw { statusCode: 400, message: 'Invalid product ID.' };
+      throw createWishlistError('Invalid product ID.', 400);
     }
 
     await User.findByIdAndUpdate(userId, { $pull: { wishlist: productId } });
     const wishlist = await this.getWishlist(userId);
     return {
       wishlisted: false,
-      wishlist
+      wishlist,
     };
-  }
+  },
 };

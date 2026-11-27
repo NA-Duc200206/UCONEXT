@@ -118,7 +118,12 @@ const Register = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const rawRedirect = searchParams.get('redirect') || '/';
-  const redirectTarget = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
+  const redirectTarget =
+    rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : !rawRedirect.includes('://') && !rawRedirect.startsWith('//')
+        ? `/${rawRedirect}`
+        : '/';
 
   // Form State
   const [name, setName] = useState('');
@@ -626,6 +631,7 @@ const Register = () => {
       {/* Terms of Service & Privacy Policy Modal */}
       {showTermsModal && (
         <div
+          role="presentation"
           style={{
             position: 'fixed',
             inset: 0,
@@ -638,10 +644,16 @@ const Register = () => {
             WebkitBackdropFilter: 'blur(8px)',
             padding: '20px',
           }}
-          onClick={() => setShowTermsModal(false)}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowTermsModal(false);
+            }
+          }}
         >
           <div
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Terms of Service and Privacy Policy"
             style={{
               width: '100%',
               maxWidth: '500px',

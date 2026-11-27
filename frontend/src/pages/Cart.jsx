@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,6 @@ import {
   CreditCard,
   Truck,
   Tag,
-  Check,
   AlertCircle,
   CheckCircle2,
   X,
@@ -32,11 +31,15 @@ const Cart = () => {
   const [streetAddress, setStreetAddress] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'vnpay'
+  const [vnpayAvailable, setVnpayAvailable] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutFeedback, setCheckoutFeedback] = useState(null);
 
-  const savedAddresses = Array.isArray(user?.savedAddresses) ? user.savedAddresses : [];
+  const savedAddresses = useMemo(
+    () => (Array.isArray(user?.savedAddresses) ? user.savedAddresses : []),
+    [user?.savedAddresses]
+  );
 
   // Promo Code states
   const [promoCode, setPromoCode] = useState('');
@@ -59,6 +62,24 @@ const Cart = () => {
       }
     };
     fetchActiveCoupons();
+    const fetchPaymentMethods = async () => {
+      try {
+        const res = await api.payments.getMethods();
+        if (mounted) {
+          const enabled = Boolean(res?.vnpay);
+          setVnpayAvailable(enabled);
+          if (!enabled) {
+            setPaymentMethod((prev) => (prev === 'vnpay' ? 'cod' : prev));
+          }
+        }
+      } catch {
+        if (mounted) {
+          setVnpayAvailable(false);
+          setPaymentMethod((prev) => (prev === 'vnpay' ? 'cod' : prev));
+        }
+      }
+    };
+    fetchPaymentMethods();
     return () => {
       mounted = false;
     };
@@ -114,7 +135,7 @@ const Cart = () => {
         setDiscountAmount(res.discountAmount);
         setCouponFeedback({
           type: 'success',
-          message: `Coupon "${res.code}" applied (-${formatCurrency(res.discountAmount)}).`,
+          message: `Coupon "${res.code}" applied (-${formatVND(res.discountAmount)}).`,
         });
       } catch (err) {
         if (cancelled) return;
@@ -146,7 +167,7 @@ const Cart = () => {
     setCouponFeedback(null);
   };
 
-  const applySavedAddress = (addr) => {
+  const applySavedAddress = React.useCallback((addr) => {
     if (!addr) return;
     setSelectedAddressId(String(addr._id || addr.id || ''));
     setFullName(addr.fullName || user?.name || '');
@@ -161,7 +182,7 @@ const Cart = () => {
       setStreetAddress(rawAddress);
       setProvinceCity('');
     }
-  };
+  }, [user?.name]);
 
   useEffect(() => {
     if (isCheckoutMode && user && savedAddresses.length > 0 && !selectedAddressId && !phoneNumber && !streetAddress) {
@@ -170,7 +191,7 @@ const Cart = () => {
         applySavedAddress(defaultAddr);
       }
     }
-  }, [isCheckoutMode, user, savedAddresses.length, selectedAddressId, phoneNumber, streetAddress]);
+  }, [isCheckoutMode, user, savedAddresses, selectedAddressId, phoneNumber, streetAddress, applySavedAddress]);
 
   const handleProceedToCheckout = () => {
     setCheckoutFeedback(null);
@@ -201,8 +222,8 @@ const Cart = () => {
       const orderItems = cart.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
-        color: item.color,
-        size: item.size,
+        color: item.color || undefined,
+        size: item.size || undefined,
       }));
 
       const locationPart = provinceCity.trim()
@@ -689,9 +710,9 @@ const Cart = () => {
               >
                 {/* Structured Shipping Details */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '700' }}>
+                  <div style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '700' }}>
                     Shipping Information
-                  </label>
+                  </div>
 
                   {savedAddresses.length > 0 && (
                     <div
@@ -844,9 +865,9 @@ const Cart = () => {
 
                 {/* Payment Options */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                  <div style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
                     Payment Method
-                  </label>
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {/* COD */}
                     <label
@@ -874,34 +895,36 @@ const Cart = () => {
                       </span>
                     </label>
 
-                    {/* VNPAY */}
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        cursor: 'pointer',
-                        padding: '11px 12px',
-                        borderRadius: '10px',
-                        border: `1px solid ${paymentMethod === 'vnpay' ? 'var(--brand)' : 'var(--glass-border)'}`,
-                        background: paymentMethod === 'vnpay' ? 'rgba(36, 84, 244, 0.08)' : 'transparent',
-                        transition: 'var(--transition-fast)',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="payment"
-                        checked={paymentMethod === 'vnpay'}
-                        onChange={() => setPaymentMethod('vnpay')}
-                        style={{ accentColor: 'var(--brand)' }}
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CreditCard size={15} strokeWidth={1.75} color="var(--text-secondary)" />
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                          VNPAY Online Payment
-                        </span>
-                      </div>
-                    </label>
+                    {/* VNPAY (only shown when merchant gateway is enabled) */}
+                    {vnpayAvailable && (
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          cursor: 'pointer',
+                          padding: '11px 12px',
+                          borderRadius: '10px',
+                          border: `1px solid ${paymentMethod === 'vnpay' ? 'var(--brand)' : 'var(--glass-border)'}`,
+                          background: paymentMethod === 'vnpay' ? 'rgba(36, 84, 244, 0.08)' : 'transparent',
+                          transition: 'var(--transition-fast)',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="payment"
+                          checked={paymentMethod === 'vnpay'}
+                          onChange={() => setPaymentMethod('vnpay')}
+                          style={{ accentColor: 'var(--brand)' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CreditCard size={15} strokeWidth={1.75} color="var(--text-secondary)" />
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                            VNPAY Online Payment
+                          </span>
+                        </div>
+                      </label>
+                    )}
                   </div>
                 </div>
 
