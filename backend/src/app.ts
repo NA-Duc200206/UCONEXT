@@ -94,6 +94,7 @@ export function createApp(opts: CreateAppOptions = {}): Express {
       // Required so Firebase Google Sign-In popups keep window.opener when Express serves the SPA
       crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
       crossOriginResourcePolicy: { policy: 'cross-origin' },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     })
   );
   app.use(
