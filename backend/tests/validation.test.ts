@@ -145,8 +145,27 @@ describe('Zod boundary validation & safe 500 error responses', () => {
       }).success
     ).toBe(false);
 
-    // ai
+    // ai (accepts both { role, text } from AIFloatingChat and { role, content }, plus nullish productId)
     expect(aiChatSchema.safeParse({ message: 'Recommend headphones under 2M' }).success).toBe(true);
+    const parsedAiTextHistory = aiChatSchema.safeParse({
+      message: 'Compare the first two',
+      history: [
+        { role: 'user', text: 'Recommend headphones under 2M' },
+        { role: 'assistant', content: 'Here are two options.' },
+      ],
+      context: { page: '/products', productId: null, cartCount: 0 },
+    });
+    expect(parsedAiTextHistory.success).toBe(true);
+    if (parsedAiTextHistory.success) {
+      expect(parsedAiTextHistory.data.history?.[0].text).toBe('Recommend headphones under 2M');
+      expect(parsedAiTextHistory.data.history?.[1].text).toBe('Here are two options.');
+    }
+    expect(
+      aiChatSchema.safeParse({
+        message: 'Hi',
+        history: [{ role: 'user' }],
+      }).success
+    ).toBe(false);
     expect(aiChatSchema.safeParse({ message: 'M'.repeat(1001) }).success).toBe(false);
 
     // cart (including null optional color/size/image fields from CartContext)

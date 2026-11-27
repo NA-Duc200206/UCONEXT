@@ -24,7 +24,7 @@ function createHttpError(message: string, statusCode: number) {
 }
 
 function getFirebaseAdminAuth() {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectId = (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '').trim();
   if (!projectId) {
     const error: any = new Error('Firebase Authentication is not configured on the server (missing FIREBASE_PROJECT_ID).');
     error.statusCode = 500;
