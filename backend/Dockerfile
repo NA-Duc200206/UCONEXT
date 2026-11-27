@@ -1,5 +1,5 @@
 # ---- Stage 1: Build TypeScript backend ----
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY backend ./backend
 RUN npm run build:backend
 
 # ---- Stage 2: Production runtime ----
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app
 
