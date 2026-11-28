@@ -17,7 +17,7 @@
     "framer-motion": "^12.40.0",
     "lucide-react": "^0.379.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.3.1",
     "react-router-dom": "^6.23.1",
     "recharts": "^2.12.7",
     "socket.io-client": "^4.8.4"
@@ -28,7 +28,7 @@
     "@testing-library/react": "^16.3.3",
     "@types/canvas-confetti": "^1.9.0",
     "@types/react": "^18.3.31",
-    "@types/react-dom": "^18.3.7",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.4.0",
     "autoprefixer": "^10.5.0",
     "jsdom": "^31.0.1",
