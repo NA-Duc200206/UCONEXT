@@ -1,6 +1,6 @@
 # UCONEXT Platform (Multi-Product E-Commerce Store)
 
-[![CI](https://github.com/NA-Duc200206/Multi-product-store/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/NA-Duc200206/Multi-product-store/actions/workflows/ci.yml)
+[![CI](https://github.com/NA-Duc200206/UCONEXT/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/NA-Duc200206/UCONEXT/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-uconext.onrender.com-2454F4?style=flat)](https://uconext.onrender.com/)
 [![API Docs](https://img.shields.io/badge/OpenAPI%203.0-Swagger%20UI-10b981?style=flat)](https://uconext.onrender.com/api/docs)
 
@@ -12,7 +12,17 @@
 - **Interactive Swagger UI (OpenAPI 3.0):** [https://uconext.onrender.com/api/docs](https://uconext.onrender.com/api/docs) *(JSON spec: [`/api/docs.json`](https://uconext.onrender.com/api/docs.json))*
 - **Health Check:** [https://uconext.onrender.com/api/health](https://uconext.onrender.com/api/health)
 
-> *Lưu ý: Bản demo đang chạy trên gói Render Free (tự ngủ sau 15 phút không có truy cập), nên lần mở đầu tiên có thể mất khoảng 30–50 giây để đánh thức server.*
+> *Lưu ý: Bản demo chạy trên gói Render Free và được giữ ấm định kỳ qua UptimeRobot; nếu hệ thống vừa khởi động lại, lần mở đầu tiên có thể mất 30–50 giây.*
+
+---
+
+## Giao Diện Thực Tế (Showcase)
+
+| Storefront — Trang Chủ | Danh Mục & Bộ Lọc Sản Phẩm |
+| :---: | :---: |
+| ![UCONEXT Storefront Home](./docs/screenshots/storefront-home.png) | ![UCONEXT Shop Catalog](./docs/screenshots/shop-catalog.png) |
+| **Trợ Lý Mua Sắm AI (AI Shopping Concierge)** | **Tài Liệu OpenAPI 3.0 / Swagger UI (`/api/docs`)** |
+| ![UCONEXT AI Shopping Concierge](./docs/screenshots/ai-assistant.png) | ![UCONEXT OpenAPI Swagger UI](./docs/screenshots/swagger-api-docs.png) |
 
 ---
 
