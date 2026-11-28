@@ -5,8 +5,10 @@ import fs from 'fs';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import path from 'path';
+import swaggerUi from 'swagger-ui-express';
 
 import { createHttpLogger } from './config/logger';
+import { createOpenApiSpec } from './config/openapi';
 import { redisClient } from './config/redis';
 import { isOriginAllowed, parseAllowedOrigins } from './config/security';
 import authRoutes from './routes/authRoutes';
@@ -129,6 +131,26 @@ export function createApp(opts: CreateAppOptions = {}): Express {
   app.use('/api/reviews', reviewRoutes);
   app.use('/api/wishlist', wishlistRoutes);
   app.use('/api/ai', aiRoutes);
+
+  // Interactive OpenAPI 3.0 documentation (set ENABLE_API_DOCS=false to disable)
+  const apiDocsDisabled = ['false', '0'].includes((process.env.ENABLE_API_DOCS || '').trim().toLowerCase());
+  if (!apiDocsDisabled) {
+    const openApiSpec = createOpenApiSpec();
+    app.get('/api/docs.json', (_req, res) => {
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.json(openApiSpec);
+    });
+    app.use(
+      '/api/docs',
+      swaggerUi.serve,
+      swaggerUi.setup(openApiSpec, {
+        customSiteTitle: 'UCONEXT API Docs',
+        swaggerOptions: {
+          persistAuthorization: true,
+        },
+      })
+    );
+  }
 
   const frontendDistDir = resolveFrontendDistDir(opts);
 

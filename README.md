@@ -1,10 +1,15 @@
 # UCONEXT Platform (Multi-Product E-Commerce Store)
 
+[![CI](https://github.com/NA-Duc200206/Multi-product-store/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/NA-Duc200206/Multi-product-store/actions/workflows/ci.yml)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-uconext.onrender.com-2454F4?style=flat)](https://uconext.onrender.com/)
+[![API Docs](https://img.shields.io/badge/OpenAPI%203.0-Swagger%20UI-10b981?style=flat)](https://uconext.onrender.com/api/docs)
+
 > Nền tảng thương mại điện tử Full-Stack (E-Commerce) đa danh mục mang thương hiệu **UCONEXT**, tích hợp AI Shopping Concierge, quản trị toàn diện (Admin Portal), thanh toán COD & VNPAY, bộ nhớ đệm Redis, thông báo thời gian thực qua Socket.IO và đóng gói sẵn sàng cho Docker & Render.
 
-## Live Demo
+## Live Demo & API Documentation
 
 - **Storefront & API:** [https://uconext.onrender.com](https://uconext.onrender.com/)
+- **Interactive Swagger UI (OpenAPI 3.0):** [https://uconext.onrender.com/api/docs](https://uconext.onrender.com/api/docs) *(JSON spec: [`/api/docs.json`](https://uconext.onrender.com/api/docs.json))*
 - **Health Check:** [https://uconext.onrender.com/api/health](https://uconext.onrender.com/api/health)
 
 > *Lưu ý: Bản demo đang chạy trên gói Render Free (tự ngủ sau 15 phút không có truy cập), nên lần mở đầu tiên có thể mất khoảng 30–50 giây để đánh thức server.*
@@ -36,7 +41,7 @@
 | Thành phần | Công nghệ |
 | :--- | :--- |
 | **Frontend** | React 18, Vite 6, React Router 6, TailwindCSS 4, Framer Motion, Recharts, Lucide, Firebase Auth, Socket.IO Client, Sentry |
-| **Backend** | Node.js 22, Express, TypeScript, Mongoose 9 (MongoDB), Redis 6, Socket.IO, Nodemailer, Multer, Helmet, Pino, Sentry, Firebase Admin |
+| **Backend** | Node.js 22, Express, TypeScript, Mongoose 9 (MongoDB), Redis 6, Socket.IO, Nodemailer, Multer, Helmet, OpenAPI / Swagger UI, Pino, Sentry, Firebase Admin |
 | **Thanh toán & AI** | VNPAY Sandbox, COD, Multi-provider LLM (Gemini / OpenAI / Groq / OpenRouter / DeepSeek / Ollama) |
 | **Kiểm thử & CI/CD** | Vitest + V8 Coverage + `mongodb-memory-server` (Backend), Vitest + React Testing Library (Frontend), Playwright E2E, ESLint 9, Prettier, GitHub Actions, Docker, Nginx & Render Blueprint |
 | **Kiến trúc** | NPM Workspaces Monorepo (`backend` + `frontend`) |
