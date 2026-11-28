@@ -72,6 +72,25 @@ describe('Express HTTP routes, RBAC, CORS, domain endpoints, and upload security
     expect(getIO()).toBeNull();
   });
 
+  it('serves OpenAPI 3.0 JSON at /api/docs.json and Swagger UI HTML at /api/docs/', async () => {
+    const specRes = await fetch(`${baseUrl}/api/docs.json`);
+    expect(specRes.status).toBe(200);
+    const spec: any = await specRes.json();
+    expect(spec.openapi).toBe('3.0.3');
+    expect(spec.info?.title).toBe('UCONEXT E-Commerce API');
+    expect(spec.paths['/api/health']).toBeDefined();
+    expect(spec.paths['/api/auth/login']).toBeDefined();
+    expect(spec.paths['/api/products']).toBeDefined();
+    expect(spec.paths['/api/orders']).toBeDefined();
+    expect(spec.paths['/api/ai/chat']).toBeDefined();
+
+    const uiRes = await fetch(`${baseUrl}/api/docs/`);
+    expect(uiRes.status).toBe(200);
+    expect(uiRes.headers.get('content-type')).toContain('text/html');
+    const html = await uiRes.text();
+    expect(html).toContain('UCONEXT API Docs');
+  });
+
   it('reports minimal public /api/health, detailed internal /api/health/ready, and enforces CORS origins', async () => {
     const healthRes = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: 'http://localhost:3000' },
